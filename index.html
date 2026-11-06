@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#123c57">
   <title>Recebimento Fresh</title>
+  <link rel="manifest" href="./manifest.json">
   <style>
     :root {
       color-scheme: light;
@@ -59,6 +60,7 @@
     .pill { font-weight: 700; white-space: nowrap; }
     .good { color: #b7f4d0; }
     .warn { color: #ffe49a; }
+    .offline-ready { color: #b7f4d0; font-size: .82rem; font-weight: 700; white-space: nowrap; }
     .error { color: #a62222; }
     .notice {
       margin: 0 0 16px;
@@ -141,6 +143,7 @@
     <div class="header-inner">
       <h1>Recebimento Fresh</h1>
       <div class="status-line" aria-live="polite">
+        <span class="offline-ready" id="offline-ready" hidden>Offline pronto</span>
         <span class="pill" id="pending-count">Pendentes: 0</span>
         <span class="pill good" id="sent-count">Enviados: 0</span>
         <span class="pill warn" id="error-count">Com erro: 0</span>
@@ -315,7 +318,8 @@
       retryLastSentButton: document.getElementById('retry-last-sent-button'),
       duplicateTestMessage: document.getElementById('duplicate-test-message'),
       networkNotice: document.getElementById('network-notice'),
-      storageNotice: document.getElementById('storage-notice')
+      storageNotice: document.getElementById('storage-notice'),
+      offlineReady: document.getElementById('offline-ready')
     };
 
     function showMessage(message, isError) {
@@ -915,10 +919,22 @@
       showNetworkNotice('Sem conexão. Os eventos permanecem salvos neste aparelho.');
     });
 
+    async function registerOfflineSupport() {
+      if (!('serviceWorker' in navigator) || !window.isSecureContext) return;
+      try {
+        await navigator.serviceWorker.register('./sw.js', { scope: './' });
+        await navigator.serviceWorker.ready;
+        elements.offlineReady.hidden = false;
+      } catch (error) {
+        showMessage('Não foi possível preparar o modo offline neste aparelho.', true);
+      }
+    }
+
     async function startApp() {
       readConfig();
       populateConfiguredOptions(elements.dock, DOCAS);
       populateConfiguredOptions(elements.category, CATEGORIAS);
+      void registerOfflineSupport();
       await initializeStorage();
       try {
         await render();
