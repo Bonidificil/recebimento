@@ -92,6 +92,22 @@
     .order-summary { display: grid; gap: 10px; }
     .order-summary p { margin: 0; font-size: 1.1rem; font-weight: 700; }
     .timer { font-size: 2rem !important; font-variant-numeric: tabular-nums; }
+    .system-outage {
+      padding: 14px 16px;
+      border: 3px solid #8a1c1c;
+      border-radius: 9px;
+      background: #b3261e;
+      color: white;
+      font-size: 1.1rem;
+      font-weight: 800;
+    }
+    .order-actions { display: grid; gap: 12px; margin-top: 20px; }
+    .order-actions button { min-height: 64px; }
+    .order-actions .choice-buttons { grid-template-columns: 1fr; }
+    .choice-buttons[hidden] { display: none; }
+    .action-group { display: grid; gap: 8px; }
+    .action-status { min-height: 1.5em; font-weight: 750; }
+    .action-status[hidden], .action-group[hidden] { display: none; }
     .text-link {
       display: inline-flex;
       align-items: center;
@@ -185,6 +201,7 @@
   <main>
     <div id="storage-notice" class="notice" role="status" hidden></div>
     <div id="network-notice" class="notice" role="status" hidden></div>
+    <div id="system-outage-notice" class="system-outage" role="status" aria-live="polite" hidden></div>
 
     <section id="start-screen" aria-labelledby="start-heading" hidden>
       <h2 id="start-heading">Início de turno</h2>
@@ -210,6 +227,7 @@
         <h2 id="turn-heading">Novo pedido</h2>
         <p id="operator-summary"></p>
         <a id="change-operator" class="text-link" href="#">Trocar operador</a>
+        <button id="system-outage-turn-button" type="button">Sistema caiu</button>
       </div>
       <form id="order-form" novalidate>
         <div class="choice-group">
@@ -247,7 +265,33 @@
           <p id="active-order-timer" class="timer" aria-live="off">00:00</p>
         </div>
         <a id="active-change-operator" class="text-link" href="#">Trocar operador</a>
-        <button id="back-order-test-button" class="secondary" type="button">Voltar (teste)</button>
+        <div class="order-actions">
+          <div class="action-group" id="purchases-actions">
+            <button id="send-purchases-button" type="button">Enviado a Compras</button>
+            <div id="purchases-reasons" class="choice-buttons" hidden>
+              <button id="purchases-damage-button" class="secondary" type="button">Avaria</button>
+              <button id="purchases-discrepancy-button" class="secondary" type="button">Divergência</button>
+            </div>
+            <p id="purchases-wait" class="action-status" role="status" hidden></p>
+            <button id="purchases-responded-button" type="button" hidden>Compras respondeu</button>
+          </div>
+          <button id="dock-departure-button" type="button" hidden>Saí da doca</button>
+          <div class="action-group">
+            <strong>Cheguei na câmara</strong>
+            <div id="camera-buttons" class="choice-buttons" role="group" aria-label="Selecione a câmara"></div>
+            <button id="support-badge-toggle" class="secondary" type="button">+ apoio</button>
+            <label id="support-badge-field" hidden>
+              Crachá de apoio
+              <input id="order-support-badge" maxlength="80" autocomplete="off">
+            </label>
+            <p id="trip-time-message" class="action-status" role="status" hidden></p>
+          </div>
+          <button id="return-dock-button" type="button" hidden>Voltei à doca</button>
+          <p id="return-time-message" class="action-status" role="status" hidden></p>
+          <button id="last-pallet-button" type="button">Último pallet</button>
+          <button id="system-outage-toggle-button" type="button">Sistema caiu</button>
+          <p id="order-action-message" class="field-notice" role="status" aria-live="polite"></p>
+        </div>
       </div>
     </section>
 
@@ -270,6 +314,7 @@
             <option>SESSAO_INICIO</option>
             <option>DOCA_INICIO</option>
             <option>PESSOAS</option>
+            <option>VOLTA_DOCA</option>
             <option>COMPRAS_ENVIADO</option>
             <option>COMPRAS_RESPONDEU</option>
             <option>SAIDA_DOCA</option>
@@ -360,12 +405,13 @@
 
     const ENDPOINT_URL = 'https://script.google.com/macros/s/AKfycbw79xdEqw6DXKh7Z-k3q6DBwKSjNTkPuk-UWHavlQ2d1zcg11K_7oj8x8b2dF-WM8HPwA/exec';
     const TOKEN = '4d14db4eeac045e5bd731cc0b3faab99926e4a413f384be8ba0c55cb220ba3e1';
+    const USAR_SAIDA_DOCA = false;
     const DOCAS = ['D1', 'D2', 'D3'];
     const CAMARAS = ['CAM-01', 'CAM-02', 'CAM-03'];
     const CATEGORIAS = ['Carne', 'Iogurte', 'Congelado', 'FLV'];
     const ATIVIDADES = [
       'SESSAO_INICIO', 'DOCA_INICIO', 'PESSOAS', 'COMPRAS_ENVIADO',
-      'COMPRAS_RESPONDEU', 'SAIDA_DOCA', 'CAMARA_CHEGADA',
+      'COMPRAS_RESPONDEU', 'SAIDA_DOCA', 'CAMARA_CHEGADA', 'VOLTA_DOCA',
       'PEDIDO_ENTREGUE', 'SISTEMA_CAIU_INICIO', 'SISTEMA_CAIU_FIM',
       'DESFAZER'
     ];
@@ -398,6 +444,7 @@
       startScreen: document.getElementById('start-screen'),
       turnScreen: document.getElementById('turn-screen'),
       activeOrderScreen: document.getElementById('active-order-screen'),
+      systemOutageNotice: document.getElementById('system-outage-notice'),
       diagnosticScreen: document.getElementById('diagnostic-screen'),
       syncScreen: document.getElementById('sync-screen'),
       eventsScreen: document.getElementById('events-screen'),
@@ -424,7 +471,24 @@
       activeOrderOperator: document.getElementById('active-order-operator'),
       activeOrderPeople: document.getElementById('active-order-people'),
       activeOrderTimer: document.getElementById('active-order-timer'),
-      backOrderTestButton: document.getElementById('back-order-test-button'),
+      sendPurchasesButton: document.getElementById('send-purchases-button'),
+      purchasesReasons: document.getElementById('purchases-reasons'),
+      purchasesDamageButton: document.getElementById('purchases-damage-button'),
+      purchasesDiscrepancyButton: document.getElementById('purchases-discrepancy-button'),
+      purchasesWait: document.getElementById('purchases-wait'),
+      purchasesRespondedButton: document.getElementById('purchases-responded-button'),
+      cameraButtons: document.getElementById('camera-buttons'),
+      supportBadgeToggle: document.getElementById('support-badge-toggle'),
+      supportBadgeField: document.getElementById('support-badge-field'),
+      orderSupportBadge: document.getElementById('order-support-badge'),
+      tripTimeMessage: document.getElementById('trip-time-message'),
+      returnDockButton: document.getElementById('return-dock-button'),
+      returnTimeMessage: document.getElementById('return-time-message'),
+      dockDepartureButton: document.getElementById('dock-departure-button'),
+      lastPalletButton: document.getElementById('last-pallet-button'),
+      systemOutageToggleButton: document.getElementById('system-outage-toggle-button'),
+      systemOutageTurnButton: document.getElementById('system-outage-turn-button'),
+      orderActionMessage: document.getElementById('order-action-message'),
       appTitle: document.querySelector('header h1'),
       form: document.getElementById('event-form'),
       deviceName: document.getElementById('device-name'),
@@ -457,7 +521,8 @@
       cracha: '',
       aparelho_id: '',
       turno_ativo: false,
-      ts_inicio: ''
+      ts_inicio: '',
+      sistema_caiu: null
     };
 
     const orderState = {
@@ -467,12 +532,20 @@
       n_pessoas: '',
       inicio_ts: 0,
       event_ids: [],
-      ultimo_n_pessoas: '1'
+      ultimo_n_pessoas: '1',
+      compras_aguardando: null,
+      ultimo_toque_ts: 0,
+      saida_doca_ts: null,
+      camara_chegada_ts: null,
+      camara_atual: null
     };
 
     let selectedDock = '';
     let selectedCategory = '';
     let selectedPeople = '1';
+    const lastActionTimes = new Map();
+    let tripMessageState = null;
+    let returnMessageState = null;
 
     function showMessage(message, isError) {
       elements.actionMessage.textContent = message;
@@ -553,6 +626,10 @@
         sessionState.aparelho_id = typeof saved.aparelho_id === 'string' ? saved.aparelho_id : '';
         sessionState.turno_ativo = saved.turno_ativo === true;
         sessionState.ts_inicio = typeof saved.ts_inicio === 'string' ? saved.ts_inicio : '';
+        sessionState.sistema_caiu = saved.sistema_caiu &&
+          Number.isFinite(saved.sistema_caiu.desde_ts)
+          ? { desde_ts: saved.sistema_caiu.desde_ts }
+          : null;
       } catch (error) {
         showMessage('Não foi possível ler a sessão salva neste aparelho.', true);
       }
@@ -591,6 +668,26 @@
         orderState.ultimo_n_pessoas = ['1', '2', '3'].includes(saved.ultimo_n_pessoas)
           ? saved.ultimo_n_pessoas
           : '1';
+        orderState.compras_aguardando = saved.compras_aguardando &&
+          Number.isFinite(saved.compras_aguardando.desde_ts) &&
+          typeof saved.compras_aguardando.motivo === 'string'
+          ? {
+            desde_ts: saved.compras_aguardando.desde_ts,
+            motivo: saved.compras_aguardando.motivo
+          }
+          : null;
+        orderState.ultimo_toque_ts = Number.isFinite(saved.ultimo_toque_ts)
+          ? saved.ultimo_toque_ts
+          : orderState.inicio_ts;
+        orderState.saida_doca_ts = Number.isFinite(saved.saida_doca_ts)
+          ? saved.saida_doca_ts
+          : null;
+        orderState.camara_chegada_ts = Number.isFinite(saved.camara_chegada_ts)
+          ? saved.camara_chegada_ts
+          : null;
+        orderState.camara_atual = typeof saved.camara_atual === 'string'
+          ? saved.camara_atual
+          : null;
       } catch (error) {
         showMessage('Não foi possível ler o pedido salvo neste aparelho.', true);
       }
@@ -614,6 +711,13 @@
       orderState.n_pessoas = '';
       orderState.inicio_ts = 0;
       orderState.event_ids = [];
+      orderState.compras_aguardando = null;
+      orderState.ultimo_toque_ts = 0;
+      orderState.saida_doca_ts = null;
+      orderState.camara_chegada_ts = null;
+      orderState.camara_atual = null;
+      tripMessageState = null;
+      returnMessageState = null;
       selectedDock = '';
       selectedCategory = '';
       selectedPeople = orderState.ultimo_n_pessoas;
@@ -647,6 +751,7 @@
       elements.dockButtons.replaceChildren();
       elements.categoryButtons.replaceChildren();
       elements.peopleButtons.replaceChildren();
+      elements.cameraButtons.replaceChildren();
       for (const dock of DOCAS) {
         createChoiceButton(elements.dockButtons, dock, dock, value => {
           selectedDock = value;
@@ -666,6 +771,11 @@
           updateOrderChoices();
         });
       }
+      for (const camera of CAMARAS) {
+        createChoiceButton(elements.cameraButtons, camera, camera, value => {
+          void recordCameraArrival(value);
+        });
+      }
       updateOrderChoices();
     }
 
@@ -675,19 +785,81 @@
       elements.activeOrderOperator.textContent = `Operador: ${sessionState.cracha}`;
       elements.activeOrderPeople.textContent =
         `Pessoas: ${orderState.n_pessoas === '3' ? '3+' : orderState.n_pessoas}`;
+      elements.dockDepartureButton.hidden = !USAR_SAIDA_DOCA;
+      elements.sendPurchasesButton.hidden = Boolean(orderState.compras_aguardando);
+      elements.purchasesReasons.hidden = Boolean(orderState.compras_aguardando) ||
+        elements.purchasesReasons.dataset.open !== 'true';
+      elements.purchasesWait.hidden = !orderState.compras_aguardando;
+      elements.purchasesRespondedButton.hidden = !orderState.compras_aguardando;
+      elements.returnDockButton.hidden = orderState.camara_chegada_ts === null;
+      elements.systemOutageToggleButton.textContent = sessionState.sistema_caiu
+        ? 'Sistema voltou'
+        : 'Sistema caiu';
+      renderSystemOutageNotice();
       updateOrderTimer();
     }
 
-    function updateOrderTimer() {
-      if (!orderIsActive()) return;
-      const elapsedSeconds = Math.max(0, Math.floor((Date.now() - orderState.inicio_ts) / 1000));
+    function formatDuration(milliseconds) {
+      const elapsedSeconds = Math.max(0, Math.floor(milliseconds / 1000));
       const hours = Math.floor(elapsedSeconds / 3600);
       const minutes = Math.floor((elapsedSeconds % 3600) / 60);
       const seconds = elapsedSeconds % 60;
       const pad = value => String(value).padStart(2, '0');
-      elements.activeOrderTimer.textContent = hours > 0
+      return hours > 0
         ? `${pad(hours)}:${pad(minutes)}:${pad(seconds)}`
         : `${pad(minutes)}:${pad(seconds)}`;
+    }
+
+    function renderSystemOutageNotice(now = Date.now()) {
+      const outage = sessionState.turno_ativo ? sessionState.sistema_caiu : null;
+      elements.systemOutageNotice.hidden = !outage;
+      if (outage) {
+        elements.systemOutageNotice.textContent =
+          `SISTEMA FORA DO AR · ${formatDuration(now - outage.desde_ts)}`;
+      }
+      const label = outage ? 'Sistema voltou' : 'Sistema caiu';
+      elements.systemOutageToggleButton.textContent = label;
+      elements.systemOutageTurnButton.textContent = label;
+    }
+
+    function updateActionTimers(now = Date.now()) {
+      const waiting = orderState.compras_aguardando;
+      elements.purchasesWait.hidden = !waiting;
+      if (waiting) {
+        elements.purchasesWait.textContent =
+          `Aguardando Compras: ${formatDuration(now - waiting.desde_ts)}`;
+      }
+
+      const trip = tripMessageState && now < tripMessageState.until ? tripMessageState : null;
+      elements.tripTimeMessage.hidden = !trip;
+      if (trip) {
+        elements.tripTimeMessage.textContent = `Viagem: ${formatDuration(trip.duration_ms)}`;
+      } else {
+        tripMessageState = null;
+      }
+
+      const returned = returnMessageState && now < returnMessageState.until
+        ? returnMessageState
+        : null;
+      elements.returnTimeMessage.hidden = !returned;
+      if (returned) {
+        elements.returnTimeMessage.textContent =
+          `Retorno: ${formatDuration(returned.duration_ms)}`;
+      } else {
+        returnMessageState = null;
+      }
+      renderSystemOutageNotice(now);
+    }
+
+    function updateOrderTimer() {
+      const now = Date.now();
+      if (orderIsActive()) {
+        elements.activeOrderTimer.textContent =
+          formatDuration(now - orderState.inicio_ts);
+        updateActionTimers(now);
+      } else {
+        renderSystemOutageNotice(now);
+      }
     }
 
     function showScreen(screen) {
@@ -699,6 +871,7 @@
       elements.diagnosticScreen.hidden = screen !== 'diagnostic';
       elements.syncScreen.hidden = !(onTurnScreen || onActiveOrderScreen);
       elements.eventsScreen.hidden = !(onTurnScreen || onActiveOrderScreen);
+      renderSystemOutageNotice();
     }
 
     function showSessionScreen() {
@@ -899,6 +1072,63 @@
       if (!added) throw new Error('Este identificador já existe no armazenamento local.');
       await render();
       return record;
+    }
+
+    function acceptActionTouch(action, now) {
+      const timestamp = now.getTime();
+      const previous = lastActionTimes.get(action);
+      if (previous !== undefined && timestamp - previous < 1500) {
+        elements.orderActionMessage.textContent = 'Aguarde um instante antes de repetir esta ação.';
+        return false;
+      }
+      lastActionTimes.set(action, timestamp);
+      elements.orderActionMessage.textContent = '';
+      return true;
+    }
+
+    async function createTurnEvent(activity, now, fields = {}, updateOrder = null) {
+      const hasActiveOrder = orderIsActive();
+      const record = await createLocalEvent({
+        pedido: hasActiveOrder ? orderState.pedido : '',
+        doca: hasActiveOrder ? orderState.doca : '',
+        categoria: hasActiveOrder ? orderState.categoria : '',
+        cracha: sessionState.cracha,
+        aparelho_id: sessionState.aparelho_id,
+        fonte: 'toque',
+        atividade: activity,
+        ...fields
+      }, now);
+
+      if (hasActiveOrder) {
+        orderState.event_ids = [...new Set([...orderState.event_ids, record.event_id])];
+        orderState.ultimo_toque_ts = now.getTime();
+        if (updateOrder) updateOrder(now);
+        if (!saveOrderState()) {
+          throw new Error('O evento foi salvo, mas não foi possível salvar o estado do pedido.');
+        }
+        renderActiveOrder();
+      }
+      void syncQueue();
+      return record;
+    }
+
+    async function runTurnAction(action, activity, fields = {}, updateOrder = null) {
+      const now = new Date();
+      if (!acceptActionTouch(action, now)) return;
+      try {
+        await createTurnEvent(activity, now, fields, updateOrder);
+      } catch (error) {
+        elements.orderActionMessage.textContent =
+          error.message || 'Não foi possível registrar esta ação.';
+      }
+    }
+
+    function showTimedMessage(stateSetter, timestamp, durationMs) {
+      stateSetter({
+        duration_ms: durationMs,
+        until: timestamp + 8000
+      });
+      updateActionTimers(timestamp);
     }
 
     function retryDelay(attempts) {
@@ -1396,6 +1626,11 @@
         orderState.inicio_ts = now.getTime();
         orderState.event_ids = [dockEvent.event_id];
         orderState.ultimo_n_pessoas = selectedPeople;
+        orderState.compras_aguardando = null;
+        orderState.ultimo_toque_ts = now.getTime();
+        orderState.saida_doca_ts = null;
+        orderState.camara_chegada_ts = null;
+        orderState.camara_atual = null;
         if (!saveOrderState()) {
           Object.assign(orderState, previousOrder);
           return;
@@ -1411,11 +1646,140 @@
       }
     });
 
-    elements.backOrderTestButton.addEventListener('click', () => {
-      // TEMPORÁRIO: removido no M2c
-      if (!clearActiveOrder()) return;
-      showSessionScreen();
+    elements.sendPurchasesButton.addEventListener('click', () => {
+      elements.purchasesReasons.dataset.open = 'true';
+      elements.purchasesReasons.hidden = false;
     });
+
+    elements.purchasesDamageButton.addEventListener('click', () => {
+      void runTurnAction('purchases-damage', 'COMPRAS_ENVIADO', {
+        detalhe: 'Avaria'
+      }, now => {
+        orderState.compras_aguardando = {
+          desde_ts: now.getTime(),
+          motivo: 'Avaria'
+        };
+        elements.purchasesReasons.dataset.open = 'false';
+      });
+    });
+
+    elements.purchasesDiscrepancyButton.addEventListener('click', () => {
+      void runTurnAction('purchases-discrepancy', 'COMPRAS_ENVIADO', {
+        detalhe: 'Divergência'
+      }, now => {
+        orderState.compras_aguardando = {
+          desde_ts: now.getTime(),
+          motivo: 'Divergência'
+        };
+        elements.purchasesReasons.dataset.open = 'false';
+      });
+    });
+
+    elements.purchasesRespondedButton.addEventListener('click', () => {
+      void runTurnAction('purchases-responded', 'COMPRAS_RESPONDEU', {}, () => {
+        orderState.compras_aguardando = null;
+      });
+    });
+
+    elements.supportBadgeToggle.addEventListener('click', () => {
+      elements.supportBadgeField.hidden = !elements.supportBadgeField.hidden;
+      if (elements.supportBadgeField.hidden) {
+        elements.orderSupportBadge.value = '';
+      } else {
+        elements.orderSupportBadge.focus();
+      }
+    });
+
+    elements.dockDepartureButton.addEventListener('click', () => {
+      void runTurnAction('dock-departure', 'SAIDA_DOCA', {}, now => {
+        orderState.saida_doca_ts = now.getTime();
+      });
+    });
+
+    async function recordCameraArrival(camera) {
+      const now = new Date();
+      if (!acceptActionTouch('camera-arrival', now)) return;
+      const arrivalTimestamp = now.getTime();
+      const tripStart = orderState.saida_doca_ts ?? orderState.ultimo_toque_ts;
+      try {
+        await createTurnEvent('CAMARA_CHEGADA', now, {
+          detalhe: camera,
+          cracha_apoio: elements.orderSupportBadge.value.trim()
+        }, () => {
+          orderState.camara_chegada_ts = arrivalTimestamp;
+          orderState.camara_atual = camera;
+          orderState.saida_doca_ts = null;
+          showTimedMessage(
+            value => { tripMessageState = value; },
+            arrivalTimestamp,
+            Math.max(0, arrivalTimestamp - tripStart)
+          );
+        });
+        elements.orderSupportBadge.value = '';
+        elements.supportBadgeField.hidden = true;
+      } catch (error) {
+        elements.orderActionMessage.textContent =
+          error.message || 'Não foi possível registrar a chegada à câmara.';
+      }
+    }
+
+    elements.returnDockButton.addEventListener('click', () => {
+      const now = new Date();
+      if (!acceptActionTouch('return-to-dock', now)) return;
+      const arrivalTimestamp = orderState.camara_chegada_ts;
+      const camera = orderState.camara_atual;
+      if (arrivalTimestamp === null || !camera) return;
+      void createTurnEvent('VOLTA_DOCA', now, { detalhe: camera }, () => {
+        orderState.camara_chegada_ts = null;
+        orderState.camara_atual = null;
+        showTimedMessage(
+          value => { returnMessageState = value; },
+          now.getTime(),
+          Math.max(0, now.getTime() - arrivalTimestamp)
+        );
+      }).catch(error => {
+        elements.orderActionMessage.textContent =
+          error.message || 'Não foi possível registrar a volta à doca.';
+      });
+    });
+
+    elements.lastPalletButton.addEventListener('click', async () => {
+      const now = new Date();
+      if (!acceptActionTouch('last-pallet', now)) return;
+      try {
+        await createTurnEvent('PEDIDO_ENTREGUE', now);
+        if (!clearActiveOrder()) return;
+        showSessionScreen();
+      } catch (error) {
+        elements.orderActionMessage.textContent =
+          error.message || 'Não foi possível encerrar o pedido.';
+      }
+    });
+
+    async function toggleSystemOutage() {
+      const now = new Date();
+      if (!acceptActionTouch('system-outage-toggle', now)) return;
+      const isDown = Boolean(sessionState.sistema_caiu);
+      try {
+        await createTurnEvent(
+          isDown ? 'SISTEMA_CAIU_FIM' : 'SISTEMA_CAIU_INICIO',
+          now,
+          {},
+          null
+        );
+        sessionState.sistema_caiu = isDown ? null : { desde_ts: now.getTime() };
+        if (!saveSession()) {
+          throw new Error('O evento foi salvo, mas não foi possível salvar o estado do sistema.');
+        }
+        renderSystemOutageNotice();
+      } catch (error) {
+        elements.orderActionMessage.textContent =
+          error.message || 'Não foi possível registrar o estado do sistema.';
+      }
+    }
+
+    elements.systemOutageToggleButton.addEventListener('click', toggleSystemOutage);
+    elements.systemOutageTurnButton.addEventListener('click', toggleSystemOutage);
 
     elements.diagnosticBackButton.addEventListener('click', showSessionScreen);
 
