@@ -574,7 +574,7 @@
         Number.isFinite(orderState.inicio_ts) &&
         orderState.inicio_ts > 0 &&
         Array.isArray(orderState.event_ids) &&
-        orderState.event_ids.length === 2;
+        orderState.event_ids.length >= 1;
     }
 
     function loadOrderState() {
@@ -1384,11 +1384,7 @@
         };
         const dockEvent = await createLocalEvent({
           ...context,
-          atividade: 'DOCA_INICIO'
-        }, now);
-        const peopleEvent = await createLocalEvent({
-          ...context,
-          atividade: 'PESSOAS',
+          atividade: 'DOCA_INICIO',
           n_pessoas: selectedPeople
         }, now);
 
@@ -1398,7 +1394,7 @@
         orderState.categoria = selectedCategory;
         orderState.n_pessoas = selectedPeople;
         orderState.inicio_ts = now.getTime();
-        orderState.event_ids = [dockEvent.event_id, peopleEvent.event_id];
+        orderState.event_ids = [dockEvent.event_id];
         orderState.ultimo_n_pessoas = selectedPeople;
         if (!saveOrderState()) {
           Object.assign(orderState, previousOrder);
