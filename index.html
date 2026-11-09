@@ -74,6 +74,24 @@
     .field-notice { min-height: 1.4em; color: #a62222; font-size: .9rem; font-weight: 650; }
     .operator-heading { display: grid; gap: 8px; }
     .operator-heading p { margin: 0; font-size: 1.15rem; font-weight: 750; }
+    .choice-group { display: grid; gap: 8px; margin: 14px 0 20px; }
+    .choice-buttons { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; }
+    .choice-button {
+      min-height: 64px;
+      border: 2px solid #718795;
+      color: #172b3a;
+      background: #f5f8fa;
+      font-size: 1.08rem;
+    }
+    .choice-button[aria-pressed="true"] {
+      border-color: #075b8d;
+      color: white;
+      background: #075b8d;
+      box-shadow: inset 0 0 0 2px white;
+    }
+    .order-summary { display: grid; gap: 10px; }
+    .order-summary p { margin: 0; font-size: 1.1rem; font-weight: 700; }
+    .timer { font-size: 2rem !important; font-variant-numeric: tabular-nums; }
     .text-link {
       display: inline-flex;
       align-items: center;
@@ -86,7 +104,7 @@
 
     form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
     label { display: grid; align-content: start; gap: 5px; font-weight: 650; }
-    label.full, .form-actions { grid-column: 1 / -1; }
+    label.full, .choice-group, .form-actions { grid-column: 1 / -1; }
     input, select {
       width: 100%;
       min-height: 54px;
@@ -189,9 +207,47 @@
 
     <section id="turn-screen" aria-labelledby="turn-heading" hidden>
       <div class="operator-heading">
-        <h2 id="turn-heading">Turno ativo</h2>
+        <h2 id="turn-heading">Novo pedido</h2>
         <p id="operator-summary"></p>
         <a id="change-operator" class="text-link" href="#">Trocar operador</a>
+      </div>
+      <form id="order-form" novalidate>
+        <div class="choice-group">
+          <strong>Doca</strong>
+          <div id="dock-buttons" class="choice-buttons" role="group" aria-label="Selecione a doca"></div>
+          <span id="dock-notice" class="field-notice" aria-live="polite"></span>
+        </div>
+        <label class="full">
+          Número do pedido
+          <input id="order-number" name="order" maxlength="100" autocomplete="off" required>
+          <span id="order-notice" class="field-notice" aria-live="polite"></span>
+        </label>
+        <div class="choice-group">
+          <strong>Categoria (opcional)</strong>
+          <div id="category-buttons" class="choice-buttons" role="group" aria-label="Selecione a categoria"></div>
+        </div>
+        <div class="choice-group">
+          <strong>Número de pessoas</strong>
+          <div id="people-buttons" class="choice-buttons" role="group" aria-label="Selecione o número de pessoas"></div>
+        </div>
+        <div class="form-actions">
+          <button id="begin-order-button" type="submit">Começar pedido</button>
+        </div>
+      </form>
+    </section>
+
+    <section id="active-order-screen" aria-labelledby="active-order-heading" hidden>
+      <div class="operator-heading">
+        <h2 id="active-order-heading">Pedido em andamento</h2>
+        <div class="order-summary">
+          <p id="active-order-number"></p>
+          <p id="active-order-dock"></p>
+          <p id="active-order-operator"></p>
+          <p id="active-order-people"></p>
+          <p id="active-order-timer" class="timer" aria-live="off">00:00</p>
+        </div>
+        <a id="active-change-operator" class="text-link" href="#">Trocar operador</a>
+        <button id="back-order-test-button" class="secondary" type="button">Voltar (teste)</button>
       </div>
     </section>
 
@@ -322,6 +378,7 @@
     const DB_VERSION = 1;
     const CONFIG_KEY = 'recebimento-fresh-config';
     const SESSION_KEY = 'recebimento-fresh-session';
+    const ORDER_KEY = 'recebimento-fresh-order';
     const RETRY_DELAYS = [5000, 15000, 60000, 300000];
     const REQUEST_TIMEOUT_MS = 15000;
     const CSV_FORMULA_FIELDS = new Set([
@@ -340,6 +397,7 @@
       startForm: document.getElementById('start-form'),
       startScreen: document.getElementById('start-screen'),
       turnScreen: document.getElementById('turn-screen'),
+      activeOrderScreen: document.getElementById('active-order-screen'),
       diagnosticScreen: document.getElementById('diagnostic-screen'),
       syncScreen: document.getElementById('sync-screen'),
       eventsScreen: document.getElementById('events-screen'),
@@ -351,7 +409,22 @@
       startShiftButton: document.getElementById('start-shift-button'),
       operatorSummary: document.getElementById('operator-summary'),
       changeOperator: document.getElementById('change-operator'),
+      activeChangeOperator: document.getElementById('active-change-operator'),
       diagnosticBackButton: document.getElementById('diagnostic-back-button'),
+      orderForm: document.getElementById('order-form'),
+      dockButtons: document.getElementById('dock-buttons'),
+      categoryButtons: document.getElementById('category-buttons'),
+      peopleButtons: document.getElementById('people-buttons'),
+      dockNotice: document.getElementById('dock-notice'),
+      orderNumber: document.getElementById('order-number'),
+      orderNotice: document.getElementById('order-notice'),
+      beginOrderButton: document.getElementById('begin-order-button'),
+      activeOrderNumber: document.getElementById('active-order-number'),
+      activeOrderDock: document.getElementById('active-order-dock'),
+      activeOrderOperator: document.getElementById('active-order-operator'),
+      activeOrderPeople: document.getElementById('active-order-people'),
+      activeOrderTimer: document.getElementById('active-order-timer'),
+      backOrderTestButton: document.getElementById('back-order-test-button'),
       appTitle: document.querySelector('header h1'),
       form: document.getElementById('event-form'),
       deviceName: document.getElementById('device-name'),
@@ -386,6 +459,20 @@
       turno_ativo: false,
       ts_inicio: ''
     };
+
+    const orderState = {
+      pedido: '',
+      doca: '',
+      categoria: '',
+      n_pessoas: '',
+      inicio_ts: 0,
+      event_ids: [],
+      ultimo_n_pessoas: '1'
+    };
+
+    let selectedDock = '';
+    let selectedCategory = '';
+    let selectedPeople = '1';
 
     function showMessage(message, isError) {
       elements.actionMessage.textContent = message;
@@ -481,19 +568,153 @@
       }
     }
 
+    function orderIsActive() {
+      return typeof orderState.pedido === 'string' &&
+        orderState.pedido.length > 0 &&
+        Number.isFinite(orderState.inicio_ts) &&
+        orderState.inicio_ts > 0 &&
+        Array.isArray(orderState.event_ids) &&
+        orderState.event_ids.length === 2;
+    }
+
+    function loadOrderState() {
+      try {
+        const saved = JSON.parse(localStorage.getItem(ORDER_KEY) || '{}');
+        orderState.pedido = typeof saved.pedido === 'string' ? saved.pedido : '';
+        orderState.doca = typeof saved.doca === 'string' ? saved.doca : '';
+        orderState.categoria = typeof saved.categoria === 'string' ? saved.categoria : '';
+        orderState.n_pessoas = typeof saved.n_pessoas === 'string' ? saved.n_pessoas : '';
+        orderState.inicio_ts = Number.isFinite(saved.inicio_ts) ? saved.inicio_ts : 0;
+        orderState.event_ids = Array.isArray(saved.event_ids)
+          ? saved.event_ids.filter(id => typeof id === 'string')
+          : [];
+        orderState.ultimo_n_pessoas = ['1', '2', '3'].includes(saved.ultimo_n_pessoas)
+          ? saved.ultimo_n_pessoas
+          : '1';
+      } catch (error) {
+        showMessage('Não foi possível ler o pedido salvo neste aparelho.', true);
+      }
+      selectedPeople = orderState.ultimo_n_pessoas;
+    }
+
+    function saveOrderState() {
+      try {
+        localStorage.setItem(ORDER_KEY, JSON.stringify(orderState));
+        return true;
+      } catch (error) {
+        showMessage('Não foi possível salvar o pedido neste aparelho.', true);
+        return false;
+      }
+    }
+
+    function clearActiveOrder() {
+      orderState.pedido = '';
+      orderState.doca = '';
+      orderState.categoria = '';
+      orderState.n_pessoas = '';
+      orderState.inicio_ts = 0;
+      orderState.event_ids = [];
+      selectedDock = '';
+      selectedCategory = '';
+      selectedPeople = orderState.ultimo_n_pessoas;
+      return saveOrderState();
+    }
+
+    function updateOrderChoices() {
+      for (const button of elements.dockButtons.querySelectorAll('button')) {
+        button.setAttribute('aria-pressed', String(button.dataset.value === selectedDock));
+      }
+      for (const button of elements.categoryButtons.querySelectorAll('button')) {
+        button.setAttribute('aria-pressed', String(button.dataset.value === selectedCategory));
+      }
+      for (const button of elements.peopleButtons.querySelectorAll('button')) {
+        button.setAttribute('aria-pressed', String(button.dataset.value === selectedPeople));
+      }
+    }
+
+    function createChoiceButton(container, label, value, onSelect) {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'choice-button';
+      button.textContent = label;
+      button.dataset.value = value;
+      button.setAttribute('aria-pressed', 'false');
+      button.addEventListener('click', () => onSelect(value));
+      container.append(button);
+    }
+
+    function initializeOrderChoices() {
+      elements.dockButtons.replaceChildren();
+      elements.categoryButtons.replaceChildren();
+      elements.peopleButtons.replaceChildren();
+      for (const dock of DOCAS) {
+        createChoiceButton(elements.dockButtons, dock, dock, value => {
+          selectedDock = value;
+          elements.dockNotice.textContent = '';
+          updateOrderChoices();
+        });
+      }
+      for (const category of CATEGORIAS) {
+        createChoiceButton(elements.categoryButtons, category, category, value => {
+          selectedCategory = selectedCategory === value ? '' : value;
+          updateOrderChoices();
+        });
+      }
+      for (const value of ['1', '2', '3']) {
+        createChoiceButton(elements.peopleButtons, value === '3' ? '3+' : value, value, selected => {
+          selectedPeople = selected;
+          updateOrderChoices();
+        });
+      }
+      updateOrderChoices();
+    }
+
+    function renderActiveOrder() {
+      elements.activeOrderNumber.textContent = `Pedido: ${orderState.pedido}`;
+      elements.activeOrderDock.textContent = `Doca: ${orderState.doca}`;
+      elements.activeOrderOperator.textContent = `Operador: ${sessionState.cracha}`;
+      elements.activeOrderPeople.textContent =
+        `Pessoas: ${orderState.n_pessoas === '3' ? '3+' : orderState.n_pessoas}`;
+      updateOrderTimer();
+    }
+
+    function updateOrderTimer() {
+      if (!orderIsActive()) return;
+      const elapsedSeconds = Math.max(0, Math.floor((Date.now() - orderState.inicio_ts) / 1000));
+      const hours = Math.floor(elapsedSeconds / 3600);
+      const minutes = Math.floor((elapsedSeconds % 3600) / 60);
+      const seconds = elapsedSeconds % 60;
+      const pad = value => String(value).padStart(2, '0');
+      elements.activeOrderTimer.textContent = hours > 0
+        ? `${pad(hours)}:${pad(minutes)}:${pad(seconds)}`
+        : `${pad(minutes)}:${pad(seconds)}`;
+    }
+
     function showScreen(screen) {
       const onTurnScreen = screen === 'turn';
+      const onActiveOrderScreen = screen === 'active-order';
       elements.startScreen.hidden = screen !== 'start';
       elements.turnScreen.hidden = !onTurnScreen;
+      elements.activeOrderScreen.hidden = !onActiveOrderScreen;
       elements.diagnosticScreen.hidden = screen !== 'diagnostic';
-      elements.syncScreen.hidden = !onTurnScreen;
-      elements.eventsScreen.hidden = !onTurnScreen;
+      elements.syncScreen.hidden = !(onTurnScreen || onActiveOrderScreen);
+      elements.eventsScreen.hidden = !(onTurnScreen || onActiveOrderScreen);
     }
 
     function showSessionScreen() {
       elements.operatorSummary.textContent =
         `Operador: ${sessionState.cracha} · Aparelho: ${sessionState.aparelho_id}`;
-      showScreen(sessionState.turno_ativo ? 'turn' : 'start');
+      if (!sessionState.turno_ativo) {
+        showScreen('start');
+      } else if (orderIsActive()) {
+        renderActiveOrder();
+        showScreen('active-order');
+      } else {
+        selectedPeople = orderState.ultimo_n_pessoas;
+        updateOrderChoices();
+        elements.orderNumber.value = '';
+        showScreen('turn');
+      }
     }
 
     function openDatabase() {
@@ -685,6 +906,10 @@
     }
 
     async function sendEvent(event) {
+      const currentEvent = await Store.get(event.event_id);
+      if (!currentEvent || currentEvent.status !== 'pendente') return 'ignorado';
+      event = currentEvent;
+
       const age = Date.now() - Date.parse(event.ts_aparelho);
       if (age > 30000 && !event.offline) {
         event = await updateEvent(event, { offline: true });
@@ -756,34 +981,76 @@
       state.syncInProgress = true;
       elements.syncButton.disabled = true;
       showNetworkNotice('');
-      try {
-        const events = (await Store.all())
-          .filter(event => event.status === 'pendente')
-          .sort((a, b) => a.createdAt - b.createdAt);
+      let lockUnavailable = false;
+      let rerunRequested = false;
 
-        for (const event of events) {
-          if (respectBackoff && event.nextAttemptAt > Date.now()) break;
-          if (!navigator.onLine) {
-            showNetworkNotice('Conexão interrompida. Os eventos continuam salvos e serão reenviados.');
-            break;
+      const runQueue = async () => {
+        try {
+          const events = (await Store.all())
+            .filter(event => event.status === 'pendente')
+            .sort((a, b) => a.createdAt - b.createdAt);
+
+          for (const event of events) {
+            if (respectBackoff && event.nextAttemptAt > Date.now()) break;
+            if (!navigator.onLine) {
+              showNetworkNotice('Conexão interrompida. Os eventos continuam salvos e serão reenviados.');
+              break;
+            }
+            const result = await sendEvent(event);
+            await render();
+            if (result === 'pendente') break;
           }
-          const result = await sendEvent(event);
-          await render();
-          if (result === 'pendente') break;
+        } catch (error) {
+          showMessage(error.message || 'Falha ao acessar os eventos locais.', true);
+        } finally {
+          elements.syncButton.disabled = false;
+          try {
+            await render();
+          } catch (error) {
+            showMessage(error.message || 'Não foi possível atualizar a lista de eventos.', true);
+          } finally {
+            rerunRequested = state.syncRequested && navigator.onLine;
+            state.syncRequested = false;
+            state.syncInProgress = false;
+          }
+        }
+      };
+
+      try {
+        if (navigator.locks) {
+          await navigator.locks.request(
+            'recebimento-sync',
+            { ifAvailable: true },
+            async lock => {
+              if (!lock) {
+                state.syncRequested = true;
+                lockUnavailable = true;
+                return;
+              }
+              await runQueue();
+            }
+          );
+        } else {
+          await runQueue();
         }
       } catch (error) {
-        showMessage(error.message || 'Falha ao acessar os eventos locais.', true);
-      } finally {
-        state.syncInProgress = false;
         elements.syncButton.disabled = false;
-        await render();
-        if (state.syncRequested && navigator.onLine) {
-          state.syncRequested = false;
-          void syncQueue();
-        } else {
-          state.syncRequested = false;
-          scheduleRetry();
-        }
+        state.syncRequested = false;
+        state.syncInProgress = false;
+        showMessage(error.message || 'Não foi possível iniciar a sincronização.', true);
+        scheduleRetry();
+        return;
+      }
+
+      if (lockUnavailable) {
+        elements.syncButton.disabled = false;
+        state.syncRequested = false;
+        state.syncInProgress = false;
+        scheduleRetry();
+      } else if (rerunRequested) {
+        void syncQueue();
+      } else {
+        scheduleRetry();
       }
     }
 
@@ -1066,8 +1333,13 @@
       }
     });
 
-    elements.changeOperator.addEventListener('click', event => {
+    function switchOperator(event) {
       event.preventDefault();
+      const previousOrder = { ...orderState, event_ids: [...orderState.event_ids] };
+      if (!clearActiveOrder()) {
+        Object.assign(orderState, previousOrder);
+        return;
+      }
       const previousSession = { ...sessionState };
       sessionState.cracha = '';
       sessionState.turno_ativo = false;
@@ -1077,6 +1349,75 @@
       }
       elements.sessionBadge.value = '';
       elements.deviceNameField.hidden = true;
+      showSessionScreen();
+    }
+
+    elements.changeOperator.addEventListener('click', switchOperator);
+    elements.activeChangeOperator.addEventListener('click', switchOperator);
+
+    elements.orderForm.addEventListener('submit', async event => {
+      event.preventDefault();
+      elements.beginOrderButton.disabled = true;
+      elements.dockNotice.textContent = '';
+      elements.orderNotice.textContent = '';
+      try {
+        const now = new Date();
+        const pedido = elements.orderNumber.value.trim();
+        if (!selectedDock) {
+          elements.dockNotice.textContent = 'Selecione uma doca.';
+          elements.dockButtons.querySelector('button')?.focus();
+          return;
+        }
+        if (!pedido) {
+          elements.orderNotice.textContent = 'Informe o número do pedido.';
+          elements.orderNumber.focus();
+          return;
+        }
+
+        const context = {
+          pedido,
+          doca: selectedDock,
+          categoria: selectedCategory,
+          cracha: sessionState.cracha,
+          aparelho_id: sessionState.aparelho_id,
+          fonte: 'toque'
+        };
+        const dockEvent = await createLocalEvent({
+          ...context,
+          atividade: 'DOCA_INICIO'
+        }, now);
+        const peopleEvent = await createLocalEvent({
+          ...context,
+          atividade: 'PESSOAS',
+          n_pessoas: selectedPeople
+        }, now);
+
+        const previousOrder = { ...orderState, event_ids: [...orderState.event_ids] };
+        orderState.pedido = pedido;
+        orderState.doca = selectedDock;
+        orderState.categoria = selectedCategory;
+        orderState.n_pessoas = selectedPeople;
+        orderState.inicio_ts = now.getTime();
+        orderState.event_ids = [dockEvent.event_id, peopleEvent.event_id];
+        orderState.ultimo_n_pessoas = selectedPeople;
+        if (!saveOrderState()) {
+          Object.assign(orderState, previousOrder);
+          return;
+        }
+
+        renderActiveOrder();
+        showScreen('active-order');
+        void syncQueue();
+      } catch (error) {
+        showMessage(error.message || 'Não foi possível começar o pedido.', true);
+      } finally {
+        elements.beginOrderButton.disabled = false;
+      }
+    });
+
+    elements.backOrderTestButton.addEventListener('click', () => {
+      // TEMPORÁRIO: removido no M2c
+      if (!clearActiveOrder()) return;
       showSessionScreen();
     });
 
@@ -1135,14 +1476,16 @@
     async function startApp() {
       readConfig();
       loadSession();
+      loadOrderState();
       if (!elements.deviceName.value.trim() && sessionState.aparelho_id) {
         elements.deviceName.value = sessionState.aparelho_id;
       }
       elements.sessionDeviceName.value = elements.deviceName.value.trim();
       elements.deviceNameField.hidden = Boolean(elements.deviceName.value.trim());
-      showSessionScreen();
       populateConfiguredOptions(elements.dock, DOCAS);
       populateConfiguredOptions(elements.category, CATEGORIAS);
+      initializeOrderChoices();
+      showSessionScreen();
       void registerOfflineSupport();
       await initializeStorage();
       try {
@@ -1156,6 +1499,7 @@
         showMessage(error.message || 'Falha ao carregar os eventos locais.', true);
       }
       setInterval(() => syncQueue(true), 30000);
+      setInterval(updateOrderTimer, 1000);
       scheduleRetry();
     }
 

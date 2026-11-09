@@ -1,6 +1,6 @@
 'use strict';
 
-const VERSION = 'recebimento-fresh-v2';
+const VERSION = 'recebimento-fresh-v4';
 const CACHE_NAME = `${VERSION}-shell`;
 const APP_PREFIX = 'recebimento-fresh-';
 const SHELL_URLS = [
