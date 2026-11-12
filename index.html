@@ -104,6 +104,28 @@
     .order-actions { display: grid; gap: 12px; margin-top: 20px; }
     .order-actions button { min-height: 64px; }
     .order-actions .choice-buttons { grid-template-columns: 1fr; }
+    .undo-section {
+      display: grid;
+      gap: 10px;
+      margin-top: 28px;
+      padding-top: 18px;
+      border-top: 1px solid #d5e0e6;
+    }
+    .undo-section > button { justify-self: start; }
+    .undo-confirmation {
+      display: grid;
+      gap: 10px;
+      padding: 14px;
+      border: 1px solid #9aadb9;
+      border-radius: 9px;
+      background: #f5f8fa;
+    }
+    .undo-confirmation[hidden] { display: none; }
+    .undo-confirmation p { margin: 0; font-weight: 700; }
+    .undo-confirmation-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .undo-confirmation-actions button { min-height: 56px; }
+    .event-undone .event-title { text-decoration: line-through; }
+    .event-undone .event-undone-label { color: #526878; font-weight: 750; }
     .choice-buttons[hidden] { display: none; }
     .action-group { display: grid; gap: 8px; }
     .action-status { min-height: 1.5em; font-weight: 750; }
@@ -252,6 +274,16 @@
           <button id="begin-order-button" type="submit">Começar pedido</button>
         </div>
       </form>
+      <div class="undo-section">
+        <button id="undo-turn-button" class="secondary undo-button" type="button" disabled>Nada para desfazer</button>
+        <div id="undo-confirm-turn" class="undo-confirmation" hidden>
+          <p id="undo-confirm-turn-message" data-undo-message></p>
+          <div class="undo-confirmation-actions">
+            <button class="undo-confirm-button" type="button">Sim, desfazer</button>
+            <button class="secondary undo-cancel-button" type="button">Cancelar</button>
+          </div>
+        </div>
+      </div>
     </section>
 
     <section id="active-order-screen" aria-labelledby="active-order-heading" hidden>
@@ -293,6 +325,20 @@
           <p id="order-action-message" class="field-notice" role="status" aria-live="polite"></p>
         </div>
       </div>
+      <div class="undo-section">
+        <button id="undo-order-button" class="secondary undo-button" type="button" disabled>Nada para desfazer</button>
+        <div id="undo-confirm-order" class="undo-confirmation" hidden>
+          <p id="undo-confirm-order-message" data-undo-message></p>
+          <div class="undo-confirmation-actions">
+            <button class="undo-confirm-button" type="button">Sim, desfazer</button>
+            <button class="secondary undo-cancel-button" type="button">Cancelar</button>
+          </div>
+        </div>
+      </div>
+      <section class="order-event-history-section" aria-labelledby="order-event-history-heading">
+        <h2 id="order-event-history-heading">Últimos eventos do pedido</h2>
+        <div id="order-event-history" class="events"></div>
+      </section>
     </section>
 
     <section id="diagnostic-screen" aria-labelledby="test-heading" hidden>
@@ -406,6 +452,10 @@
     const ENDPOINT_URL = 'https://script.google.com/macros/s/AKfycbw79xdEqw6DXKh7Z-k3q6DBwKSjNTkPuk-UWHavlQ2d1zcg11K_7oj8x8b2dF-WM8HPwA/exec';
     const TOKEN = '4d14db4eeac045e5bd731cc0b3faab99926e4a413f384be8ba0c55cb220ba3e1';
     const USAR_SAIDA_DOCA = false;
+    const JANELA_TOQUE_DUPLO_MS = 1500;
+    const JANELA_CAMARA_MS = 3000;
+    const ESCUDO_UNDO_MS = 1000;
+    const ESCUDO_UNDO_RAIO_PX = 80;
     const DOCAS = ['D1', 'D2', 'D3'];
     const CAMARAS = ['CAM-01', 'CAM-02', 'CAM-03'];
     const CATEGORIAS = ['Carne', 'Iogurte', 'Congelado', 'FLV'];
@@ -420,6 +470,24 @@
       'categoria', 'atividade', 'cracha', 'cracha_apoio', 'n_pessoas',
       'detalhe', 'fonte', 'aparelho_id', 'offline', 'ref_event_id'
     ];
+    let undoTouchShield = null;
+    document.addEventListener('click', event => {
+      if ((event.clientX === 0 && event.clientY === 0) || event.detail === 0) return;
+      const target = event.target;
+      if (target instanceof Element && target.closest('.undo-confirm-button')) {
+        undoTouchShield = {
+          x: event.clientX,
+          y: event.clientY,
+          at: performance.now()
+        };
+        return;
+      }
+
+      if (!undoTouchShield || performance.now() - undoTouchShield.at >= ESCUDO_UNDO_MS) return;
+      if (Math.hypot(event.clientX - undoTouchShield.x, event.clientY - undoTouchShield.y) >= ESCUDO_UNDO_RAIO_PX) return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+    }, true);
     const DB_NAME = 'recebimento-fresh';
     const DB_VERSION = 1;
     const CONFIG_KEY = 'recebimento-fresh-config';
@@ -445,6 +513,12 @@
       turnScreen: document.getElementById('turn-screen'),
       activeOrderScreen: document.getElementById('active-order-screen'),
       systemOutageNotice: document.getElementById('system-outage-notice'),
+      undoButtons: Array.from(document.querySelectorAll('.undo-button')),
+      undoConfirmations: Array.from(document.querySelectorAll('.undo-confirmation')),
+      undoConfirmationMessages: Array.from(document.querySelectorAll('[data-undo-message]')),
+      undoConfirmButtons: Array.from(document.querySelectorAll('.undo-confirm-button')),
+      undoCancelButtons: Array.from(document.querySelectorAll('.undo-cancel-button')),
+      orderEventHistory: document.getElementById('order-event-history'),
       diagnosticScreen: document.getElementById('diagnostic-screen'),
       syncScreen: document.getElementById('sync-screen'),
       eventsScreen: document.getElementById('events-screen'),
@@ -546,6 +620,8 @@
     const lastActionTimes = new Map();
     let tripMessageState = null;
     let returnMessageState = null;
+    let pendingUndoTarget = null;
+    let undoConfirmationTimer = null;
 
     function showMessage(message, isError) {
       elements.actionMessage.textContent = message;
@@ -724,6 +800,359 @@
       return saveOrderState();
     }
 
+    function eventTimestamp(event) {
+      const timestamp = Date.parse(event.ts_aparelho);
+      return Number.isFinite(timestamp) ? timestamp : 0;
+    }
+
+    function compareEventsByTime(left, right) {
+      return eventTimestamp(left) - eventTimestamp(right) ||
+        (Number(left.createdAt) || 0) - (Number(right.createdAt) || 0);
+    }
+
+    function eventsUndoneBy(events) {
+      return new Set(events
+        .filter(event => event.atividade === 'DESFAZER' && event.ref_event_id)
+        .map(event => event.ref_event_id));
+    }
+
+    function getLastUndoTarget(events) {
+      const deviceEvents = events
+        .filter(event => event.aparelho_id === sessionState.aparelho_id)
+        .sort(compareEventsByTime);
+      const sessionStart = deviceEvents
+        .filter(event => event.atividade === 'SESSAO_INICIO')
+        .at(-1);
+      if (!sessionStart || !sessionState.turno_ativo) return null;
+
+      const undoneIds = eventsUndoneBy(deviceEvents);
+      return deviceEvents
+        .filter(event =>
+          compareEventsByTime(event, sessionStart) > 0 &&
+          event.atividade !== 'SESSAO_INICIO' &&
+          event.atividade !== 'DESFAZER' &&
+          !undoneIds.has(event.event_id))
+        .at(-1) || null;
+    }
+
+    function readableEventName(event) {
+      const detail = event.detalhe ? ` — ${event.detalhe}` : '';
+      switch (event.atividade) {
+        case 'DOCA_INICIO': return 'Começou pedido';
+        case 'PESSOAS': return 'Número de pessoas';
+        case 'COMPRAS_ENVIADO':
+          return `Enviado a Compras${event.detalhe ? ` (${event.detalhe})` : ''}`;
+        case 'COMPRAS_RESPONDEU': return 'Compras respondeu';
+        case 'SAIDA_DOCA': return 'Saiu da doca';
+        case 'CAMARA_CHEGADA': return `Chegou na câmara${detail}`;
+        case 'VOLTA_DOCA': return `Voltou à doca${detail}`;
+        case 'PEDIDO_ENTREGUE': return 'Último pallet';
+        case 'SISTEMA_CAIU_INICIO': return 'Sistema caiu';
+        case 'SISTEMA_CAIU_FIM': return 'Sistema voltou';
+        default: return event.atividade;
+      }
+    }
+
+    function formatClock(timestamp) {
+      const date = new Date(timestamp);
+      const pad = value => String(value).padStart(2, '0');
+      return `${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+    }
+
+    function rebuildStateFromEvents(events, deviceId, lastPeople = '1') {
+      const deviceEvents = events
+        .filter(event => event.aparelho_id === deviceId)
+        .sort(compareEventsByTime);
+      const undoneIds = eventsUndoneBy(deviceEvents);
+      const effectiveEvents = deviceEvents.filter(event =>
+        event.atividade !== 'DESFAZER' && !undoneIds.has(event.event_id));
+      const latestSessionStart = deviceEvents
+        .filter(event => event.atividade === 'SESSAO_INICIO')
+        .at(-1);
+      const turnEvents = latestSessionStart
+        ? effectiveEvents.filter(event => compareEventsByTime(event, latestSessionStart) > 0)
+        : [];
+      const orderStart = turnEvents
+        .filter(event => event.atividade === 'DOCA_INICIO')
+        .at(-1);
+
+      let rebuiltOrder = {
+        pedido: '',
+        doca: '',
+        categoria: '',
+        n_pessoas: '',
+        inicio_ts: 0,
+        event_ids: [],
+        ultimo_n_pessoas: ['1', '2', '3'].includes(lastPeople) ? lastPeople : '1',
+        compras_aguardando: null,
+        ultimo_toque_ts: 0,
+        saida_doca_ts: null,
+        camara_chegada_ts: null,
+        camara_atual: null
+      };
+      let rebuiltTripMessage = null;
+      let rebuiltReturnMessage = null;
+
+      if (orderStart) {
+        const orderEvents = turnEvents.filter(event =>
+          compareEventsByTime(event, orderStart) >= 0 &&
+          event.pedido === orderStart.pedido &&
+          event.doca === orderStart.doca);
+        const deliveredAfterStart = orderEvents.some(event =>
+          event.atividade === 'PEDIDO_ENTREGUE' &&
+          compareEventsByTime(event, orderStart) > 0);
+
+        if (!deliveredAfterStart) {
+          const lastOrderEvent = orderEvents.at(-1);
+          rebuiltOrder = {
+            ...rebuiltOrder,
+            pedido: orderStart.pedido,
+            doca: orderStart.doca,
+            categoria: orderStart.categoria,
+            n_pessoas: orderStart.n_pessoas,
+            inicio_ts: eventTimestamp(orderStart),
+            event_ids: orderEvents.map(event => event.event_id),
+            ultimo_n_pessoas: ['1', '2', '3'].includes(orderStart.n_pessoas)
+              ? orderStart.n_pessoas
+              : rebuiltOrder.ultimo_n_pessoas,
+            ultimo_toque_ts: lastOrderEvent ? eventTimestamp(lastOrderEvent) : eventTimestamp(orderStart)
+          };
+
+          const purchasesSent = orderEvents
+            .filter(event => event.atividade === 'COMPRAS_ENVIADO')
+            .at(-1);
+          const purchasesAnswered = purchasesSent && orderEvents.some(event =>
+            event.atividade === 'COMPRAS_RESPONDEU' &&
+            compareEventsByTime(event, purchasesSent) > 0);
+          if (purchasesSent && !purchasesAnswered) {
+            rebuiltOrder.compras_aguardando = {
+              desde_ts: eventTimestamp(purchasesSent),
+              motivo: purchasesSent.detalhe
+            };
+          }
+
+          const latestCamera = orderEvents
+            .filter(event => event.atividade === 'CAMARA_CHEGADA')
+            .at(-1);
+          const latestDeparture = orderEvents
+            .filter(event => event.atividade === 'SAIDA_DOCA')
+            .at(-1);
+          if (latestDeparture &&
+            (!latestCamera || compareEventsByTime(latestDeparture, latestCamera) > 0)) {
+            rebuiltOrder.saida_doca_ts = eventTimestamp(latestDeparture);
+          }
+
+          if (latestCamera) {
+            const returnedAfterCamera = orderEvents.some(event =>
+              event.atividade === 'VOLTA_DOCA' &&
+              compareEventsByTime(event, latestCamera) > 0);
+            if (!returnedAfterCamera) {
+              rebuiltOrder.camara_chegada_ts = eventTimestamp(latestCamera);
+              rebuiltOrder.camara_atual = latestCamera.detalhe || null;
+            }
+
+            const priorCamera = orderEvents
+              .filter(event =>
+                event.atividade === 'CAMARA_CHEGADA' &&
+                compareEventsByTime(event, latestCamera) < 0)
+              .at(-1);
+            const departureForTrip = orderEvents
+              .filter(event =>
+                event.atividade === 'SAIDA_DOCA' &&
+                compareEventsByTime(event, latestCamera) < 0 &&
+                (!priorCamera || compareEventsByTime(event, priorCamera) > 0))
+              .at(-1);
+            const previousOrderEvent = orderEvents
+              .filter(event => compareEventsByTime(event, latestCamera) < 0)
+              .at(-1);
+            const tripStart = departureForTrip || previousOrderEvent;
+            const cameraTimestamp = eventTimestamp(latestCamera);
+            if (tripStart) {
+              rebuiltTripMessage = {
+                duration_ms: Math.max(0, cameraTimestamp - eventTimestamp(tripStart)),
+                until: cameraTimestamp + 8000
+              };
+            }
+
+            const latestReturn = orderEvents
+              .filter(event =>
+                event.atividade === 'VOLTA_DOCA' &&
+                compareEventsByTime(event, latestCamera) > 0)
+              .at(-1);
+            if (latestReturn) {
+              const returnTimestamp = eventTimestamp(latestReturn);
+              rebuiltReturnMessage = {
+                duration_ms: Math.max(0, returnTimestamp - eventTimestamp(latestCamera)),
+                until: returnTimestamp + 8000
+              };
+            }
+          }
+        }
+      }
+
+      const outageStarts = effectiveEvents.filter(event =>
+        event.atividade === 'SISTEMA_CAIU_INICIO');
+      const systemOutage = outageStarts
+        .filter(start => !effectiveEvents.some(event =>
+          event.atividade === 'SISTEMA_CAIU_FIM' &&
+          compareEventsByTime(event, start) > 0))
+        .at(-1);
+
+      return {
+        order: rebuiltOrder,
+        sistema_caiu: systemOutage ? { desde_ts: eventTimestamp(systemOutage) } : null,
+        tripMessage: rebuiltTripMessage,
+        returnMessage: rebuiltReturnMessage
+      };
+    }
+
+    function renderOrderEventHistory(events) {
+      elements.orderEventHistory.replaceChildren();
+      const orderStart = events
+        .filter(event =>
+          event.aparelho_id === sessionState.aparelho_id &&
+          event.event_id === orderState.event_ids[0])
+        .sort(compareEventsByTime)
+        .at(-1);
+      if (!orderStart) return;
+
+      const undoneIds = eventsUndoneBy(events);
+      const history = events
+        .filter(event =>
+          event.aparelho_id === sessionState.aparelho_id &&
+          event.atividade !== 'DESFAZER' &&
+          event.pedido === orderState.pedido &&
+          event.doca === orderState.doca &&
+          compareEventsByTime(event, orderStart) >= 0)
+        .sort(compareEventsByTime)
+        .slice(-8)
+        .reverse();
+
+      for (const event of history) {
+        const row = document.createElement('article');
+        row.className = undoneIds.has(event.event_id) ? 'event event-undone' : 'event';
+        const title = document.createElement('div');
+        title.className = 'event-title';
+        title.textContent = readableEventName(event);
+        const time = document.createElement('div');
+        time.className = 'event-meta';
+        time.textContent = formatClock(eventTimestamp(event));
+        row.append(title, time);
+        if (undoneIds.has(event.event_id)) {
+          const label = document.createElement('div');
+          label.className = 'event-undone-label';
+          label.textContent = 'desfeito';
+          row.append(label);
+        }
+        elements.orderEventHistory.append(row);
+      }
+    }
+
+    async function refreshUndoControls() {
+      if (state.storageMode === 'indexedDB' && !state.db) return;
+      try {
+        const events = await Store.all();
+        const target = getLastUndoTarget(events);
+        for (const button of elements.undoButtons) {
+          button.disabled = !target;
+          button.textContent = target ? 'Desfazer último toque' : 'Nada para desfazer';
+        }
+        if (orderIsActive()) renderOrderEventHistory(events);
+      } catch (error) {
+        showMessage(error.message || 'Não foi possível carregar os eventos para desfazer.', true);
+      }
+    }
+
+    function hideUndoConfirmation() {
+      if (undoConfirmationTimer !== null) {
+        clearTimeout(undoConfirmationTimer);
+        undoConfirmationTimer = null;
+      }
+      pendingUndoTarget = null;
+      for (const confirmation of elements.undoConfirmations) {
+        confirmation.hidden = true;
+      }
+    }
+
+    async function showUndoConfirmation() {
+      try {
+        const events = await Store.all();
+        const target = getLastUndoTarget(events);
+        if (!target) {
+          await refreshUndoControls();
+          hideUndoConfirmation();
+          return;
+        }
+
+        pendingUndoTarget = target;
+        const message = `Desfazer: ${readableEventName(target)} às ${formatClock(eventTimestamp(target))}?`;
+        for (const confirmation of elements.undoConfirmations) {
+          confirmation.querySelector('[data-undo-message]').textContent = message;
+          confirmation.hidden = false;
+        }
+        if (undoConfirmationTimer !== null) clearTimeout(undoConfirmationTimer);
+        undoConfirmationTimer = setTimeout(hideUndoConfirmation, 6000);
+      } catch (error) {
+        showMessage(error.message || 'Não foi possível localizar o último evento.', true);
+      }
+    }
+
+    async function confirmLastActionUndo() {
+      const now = new Date();
+      if (!acceptActionTouch('undo-confirm', now)) return;
+      const target = pendingUndoTarget;
+      if (!target) return;
+
+      try {
+        const events = await Store.all();
+        const currentTarget = getLastUndoTarget(events);
+        if (!currentTarget || currentTarget.event_id !== target.event_id) {
+          hideUndoConfirmation();
+          await refreshUndoControls();
+          elements.orderActionMessage.textContent =
+            'A lista de eventos mudou. Confira o último toque antes de desfazer.';
+          return;
+        }
+
+        await createLocalEvent({
+          pedido: target.pedido,
+          doca: target.doca,
+          categoria: target.categoria,
+          atividade: 'DESFAZER',
+          cracha: sessionState.cracha,
+          aparelho_id: sessionState.aparelho_id,
+          fonte: 'toque',
+          detalhe: target.atividade,
+          ref_event_id: target.event_id
+        }, now);
+
+        void syncQueue();
+        hideUndoConfirmation();
+        const rebuilt = rebuildStateFromEvents(
+          await Store.all(),
+          sessionState.aparelho_id,
+          orderState.ultimo_n_pessoas
+        );
+        Object.assign(orderState, rebuilt.order);
+        sessionState.sistema_caiu = rebuilt.sistema_caiu;
+        tripMessageState = rebuilt.tripMessage;
+        returnMessageState = rebuilt.returnMessage;
+        const orderSaved = saveOrderState();
+        const sessionSaved = saveSession();
+        if (!orderSaved || !sessionSaved) {
+          elements.orderActionMessage.textContent =
+            'O desfazer foi salvo como evento, mas não foi possível salvar todo o estado reconstruído.';
+        }
+        renderSystemOutageNotice();
+        showSessionScreen();
+        void refreshUndoControls();
+      } catch (error) {
+        hideUndoConfirmation();
+        elements.orderActionMessage.textContent =
+          error.message || 'Não foi possível desfazer o último toque.';
+      }
+    }
+
     function updateOrderChoices() {
       for (const button of elements.dockButtons.querySelectorAll('button')) {
         button.setAttribute('aria-pressed', String(button.dataset.value === selectedDock));
@@ -797,6 +1226,7 @@
         : 'Sistema caiu';
       renderSystemOutageNotice();
       updateOrderTimer();
+      void refreshUndoControls();
     }
 
     function formatDuration(milliseconds) {
@@ -888,6 +1318,7 @@
         elements.orderNumber.value = '';
         showScreen('turn');
       }
+      void refreshUndoControls();
     }
 
     function openDatabase() {
@@ -1074,10 +1505,10 @@
       return record;
     }
 
-    function acceptActionTouch(action, now) {
+    function acceptActionTouch(action, now, windowMs = JANELA_TOQUE_DUPLO_MS) {
       const timestamp = now.getTime();
       const previous = lastActionTimes.get(action);
-      if (previous !== undefined && timestamp - previous < 1500) {
+      if (previous !== undefined && timestamp - previous < windowMs) {
         elements.orderActionMessage.textContent = 'Aguarde um instante antes de repetir esta ação.';
         return false;
       }
@@ -1108,6 +1539,7 @@
         }
         renderActiveOrder();
       }
+      await refreshUndoControls();
       void syncQueue();
       return record;
     }
@@ -1698,7 +2130,7 @@
 
     async function recordCameraArrival(camera) {
       const now = new Date();
-      if (!acceptActionTouch('camera-arrival', now)) return;
+      if (!acceptActionTouch(`camera-arrival:${camera}`, now, JANELA_CAMARA_MS)) return;
       const arrivalTimestamp = now.getTime();
       const tripStart = orderState.saida_doca_ts ?? orderState.ultimo_toque_ts;
       try {
@@ -1780,6 +2212,15 @@
 
     elements.systemOutageToggleButton.addEventListener('click', toggleSystemOutage);
     elements.systemOutageTurnButton.addEventListener('click', toggleSystemOutage);
+    for (const button of elements.undoButtons) {
+      button.addEventListener('click', () => void showUndoConfirmation());
+    }
+    for (const button of elements.undoConfirmButtons) {
+      button.addEventListener('click', () => void confirmLastActionUndo());
+    }
+    for (const button of elements.undoCancelButtons) {
+      button.addEventListener('click', hideUndoConfirmation);
+    }
 
     elements.diagnosticBackButton.addEventListener('click', showSessionScreen);
 
@@ -1850,6 +2291,7 @@
       await initializeStorage();
       try {
         await render();
+        await refreshUndoControls();
         if (!navigator.onLine) {
           showNetworkNotice('Sem conexão. Os eventos permanecem salvos neste aparelho.');
         } else {
