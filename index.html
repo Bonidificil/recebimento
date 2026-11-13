@@ -195,6 +195,33 @@
     .retry { grid-column: 1 / -1; justify-self: start; min-height: 46px; }
     .empty { color: #526878; }
 
+    .scan-bar {
+      position: fixed;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      z-index: 3;
+      display: grid;
+      gap: 8px;
+      padding: 10px max(12px, calc((100% - 850px) / 2));
+      color: white;
+      background: #075b8d;
+      box-shadow: 0 -2px 8px #102e4033;
+    }
+    .scan-bar[hidden] { display: none; }
+    .scan-row { display: grid; grid-template-columns: 1fr 92px auto; gap: 8px; align-items: center; }
+    .scan-status { margin: 0; min-height: 44px; display: flex; align-items: center; font-size: 1.05rem; font-weight: 800; line-height: 1.25; cursor: pointer; }
+    .scan-bar input { min-height: 44px; padding: 6px 8px; font-size: .9rem; }
+    .scan-bar button { min-height: 56px; padding: 8px 12px; }
+    .scan-bar.scan-ready { background: #1d5e3a; }
+    .scan-bar.scan-nofocus { background: #7a4b00; }
+    .scan-bar.scan-pending { background: #075b8d; }
+    .scan-bar.scan-ok { background: #14532d; }
+    .scan-bar.scan-warn { background: #8a1c1c; }
+    .scan-manual { display: grid; grid-template-columns: 1fr auto; gap: 8px; }
+    .scan-manual[hidden] { display: none; }
+    body.has-scan-bar main { padding-bottom: 150px; }
+
     @media (max-width: 560px) {
       :root { font-size: 16px; }
       header { padding: 12px 14px; }
@@ -309,8 +336,8 @@
           </div>
           <button id="dock-departure-button" type="button" hidden>Saí da doca</button>
           <div class="action-group">
-            <strong>Cheguei na câmara</strong>
-            <div id="camera-buttons" class="choice-buttons" role="group" aria-label="Selecione a câmara"></div>
+            <strong>Cheguei em:</strong>
+            <div id="camera-buttons" class="choice-buttons" role="group" aria-label="Selecione o ponto de entrega"></div>
             <button id="support-badge-toggle" class="secondary" type="button">+ apoio</button>
             <label id="support-badge-field" hidden>
               Crachá de apoio
@@ -341,6 +368,18 @@
       </section>
     </section>
 
+    <div id="scan-bar" class="scan-bar scan-nofocus" hidden>
+      <div class="scan-row">
+        <p id="scan-status" class="scan-status" role="status" aria-live="polite">Toque aqui para bipar</p>
+        <input id="scan-input" inputmode="none" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" maxlength="80" aria-label="Campo de leitura do bipador">
+        <button id="scan-manual-toggle" class="secondary" type="button">Digitar</button>
+      </div>
+      <div id="scan-manual-field" class="scan-manual" hidden>
+        <input id="scan-manual-input" inputmode="text" autocomplete="off" autocapitalize="characters" autocorrect="off" spellcheck="false" maxlength="40" aria-label="Código da etiqueta (ex.: CF ou D1)" placeholder="Ex.: CF ou D1">
+        <button id="scan-manual-confirm" type="button">Confirmar</button>
+      </div>
+    </div>
+
     <section id="diagnostic-screen" aria-labelledby="test-heading" hidden>
       <h2 id="test-heading">Diagnóstico</h2>
       <p class="muted">O evento é salvo neste aparelho antes de qualquer tentativa de envio. Use dados fictícios, como TESTE001.</p>
@@ -369,6 +408,7 @@
             <option>SISTEMA_CAIU_INICIO</option>
             <option>SISTEMA_CAIU_FIM</option>
             <option>DESFAZER</option>
+            <option>LOCAL_CONFIRMADO</option>
           </select>
         </label>
         <label>
@@ -417,6 +457,7 @@
             <option value="toque">Toque</option>
             <option value="manual">Manual</option>
             <option value="qr">QR</option>
+            <option value="bipe">Bipe</option>
           </select>
         </label>
         <div class="form-actions">
@@ -457,13 +498,17 @@
     const ESCUDO_UNDO_MS = 1000;
     const ESCUDO_UNDO_RAIO_PX = 80;
     const DOCAS = ['D1', 'D2', 'D3'];
-    const CAMARAS = ['CAM-01', 'CAM-02', 'CAM-03'];
+    const CAMARAS = ['CF', 'CR', 'FLV'];
+    const JANELA_CONFIRMACAO_MS = 30000;
+    const JANELA_LEITURA_REPETIDA_MS = 3000;
+    const PREFIXO_DOCA = 'DOCA:';
+    const PREFIXO_ENTREGA = 'ENTREGA:';
     const CATEGORIAS = ['Carne', 'Iogurte', 'Congelado', 'FLV'];
     const ATIVIDADES = [
       'SESSAO_INICIO', 'DOCA_INICIO', 'PESSOAS', 'COMPRAS_ENVIADO',
       'COMPRAS_RESPONDEU', 'SAIDA_DOCA', 'CAMARA_CHEGADA', 'VOLTA_DOCA',
       'PEDIDO_ENTREGUE', 'SISTEMA_CAIU_INICIO', 'SISTEMA_CAIU_FIM',
-      'DESFAZER'
+      'DESFAZER', 'LOCAL_CONFIRMADO'
     ];
     const CAMPOS_CSV = [
       'event_id', 'ts_aparelho', 'recebido_em', 'pedido', 'doca',
@@ -588,7 +633,14 @@
       duplicateTestMessage: document.getElementById('duplicate-test-message'),
       networkNotice: document.getElementById('network-notice'),
       storageNotice: document.getElementById('storage-notice'),
-      offlineReady: document.getElementById('offline-ready')
+      offlineReady: document.getElementById('offline-ready'),
+      scanBar: document.getElementById('scan-bar'),
+      scanStatus: document.getElementById('scan-status'),
+      scanInput: document.getElementById('scan-input'),
+      scanManualToggle: document.getElementById('scan-manual-toggle'),
+      scanManualField: document.getElementById('scan-manual-field'),
+      scanManualInput: document.getElementById('scan-manual-input'),
+      scanManualConfirm: document.getElementById('scan-manual-confirm')
     };
 
     const sessionState = {
@@ -622,6 +674,11 @@
     let returnMessageState = null;
     let pendingUndoTarget = null;
     let undoConfirmationTimer = null;
+    let scanPending = null;
+    let scanFeedback = null;
+    let lastScan = { texto: '', at: 0 };
+    let scanIdleTimer = null;
+    let orderLabelBlockedAt = 0;
 
     function showMessage(message, isError) {
       elements.actionMessage.textContent = message;
@@ -794,6 +851,7 @@
       orderState.camara_atual = null;
       tripMessageState = null;
       returnMessageState = null;
+      scanPending = null;
       selectedDock = '';
       selectedCategory = '';
       selectedPeople = orderState.ultimo_n_pessoas;
@@ -831,6 +889,7 @@
           compareEventsByTime(event, sessionStart) > 0 &&
           event.atividade !== 'SESSAO_INICIO' &&
           event.atividade !== 'DESFAZER' &&
+          event.atividade !== 'LOCAL_CONFIRMADO' &&
           !undoneIds.has(event.event_id))
         .at(-1) || null;
     }
@@ -844,11 +903,12 @@
           return `Enviado a Compras${event.detalhe ? ` (${event.detalhe})` : ''}`;
         case 'COMPRAS_RESPONDEU': return 'Compras respondeu';
         case 'SAIDA_DOCA': return 'Saiu da doca';
-        case 'CAMARA_CHEGADA': return `Chegou na câmara${detail}`;
+        case 'CAMARA_CHEGADA': return event.detalhe ? `Chegou em ${event.detalhe}` : 'Chegou ao ponto de entrega';
         case 'VOLTA_DOCA': return `Voltou à doca${detail}`;
         case 'PEDIDO_ENTREGUE': return 'Último pallet';
         case 'SISTEMA_CAIU_INICIO': return 'Sistema caiu';
         case 'SISTEMA_CAIU_FIM': return 'Sistema voltou';
+        case 'LOCAL_CONFIRMADO': return `Confirmado por ${event.fonte || 'leitura'}: ${event.detalhe}`;
         default: return event.atividade;
       }
     }
@@ -903,7 +963,9 @@
           compareEventsByTime(event, orderStart) > 0);
 
         if (!deliveredAfterStart) {
-          const lastOrderEvent = orderEvents.at(-1);
+          const lastOrderEvent = orderEvents
+            .filter(event => event.atividade !== 'LOCAL_CONFIRMADO')
+            .at(-1);
           rebuiltOrder = {
             ...rebuiltOrder,
             pedido: orderStart.pedido,
@@ -963,7 +1025,9 @@
                 (!priorCamera || compareEventsByTime(event, priorCamera) > 0))
               .at(-1);
             const previousOrderEvent = orderEvents
-              .filter(event => compareEventsByTime(event, latestCamera) < 0)
+              .filter(event =>
+                event.atividade !== 'LOCAL_CONFIRMADO' &&
+                compareEventsByTime(event, latestCamera) < 0)
               .at(-1);
             const tripStart = departureForTrip || previousOrderEvent;
             const cameraTimestamp = eventTimestamp(latestCamera);
@@ -1126,6 +1190,7 @@
           ref_event_id: target.event_id
         }, now);
 
+        if (scanPending && scanPending.alvo === target.event_id) scanPending = null;
         void syncQueue();
         hideUndoConfirmation();
         const rebuilt = rebuildStateFromEvents(
@@ -1287,6 +1352,7 @@
         elements.activeOrderTimer.textContent =
           formatDuration(now - orderState.inicio_ts);
         updateActionTimers(now);
+        renderScanStatus(now);
       } else {
         renderSystemOutageNotice(now);
       }
@@ -1301,7 +1367,11 @@
       elements.diagnosticScreen.hidden = screen !== 'diagnostic';
       elements.syncScreen.hidden = !(onTurnScreen || onActiveOrderScreen);
       elements.eventsScreen.hidden = !(onTurnScreen || onActiveOrderScreen);
+      elements.scanBar.hidden = !onActiveOrderScreen;
+      document.body.classList.toggle('has-scan-bar', onActiveOrderScreen);
+      if (!onActiveOrderScreen) closeManualScan();
       renderSystemOutageNotice();
+      if (onActiveOrderScreen) setTimeout(focusScanInput, 0);
     }
 
     function showSessionScreen() {
@@ -2068,6 +2138,7 @@
           return;
         }
 
+        startConfirmation('DOCA', dockEvent.event_id, selectedDock, now);
         renderActiveOrder();
         showScreen('active-order');
         void syncQueue();
@@ -2134,7 +2205,7 @@
       const arrivalTimestamp = now.getTime();
       const tripStart = orderState.saida_doca_ts ?? orderState.ultimo_toque_ts;
       try {
-        await createTurnEvent('CAMARA_CHEGADA', now, {
+        const arrivalEvent = await createTurnEvent('CAMARA_CHEGADA', now, {
           detalhe: camera,
           cracha_apoio: elements.orderSupportBadge.value.trim()
         }, () => {
@@ -2147,6 +2218,7 @@
             Math.max(0, arrivalTimestamp - tripStart)
           );
         });
+        startConfirmation('ENTREGA', arrivalEvent.event_id, camera, now);
         elements.orderSupportBadge.value = '';
         elements.supportBadgeField.hidden = true;
       } catch (error) {
@@ -2221,6 +2293,216 @@
     for (const button of elements.undoCancelButtons) {
       button.addEventListener('click', hideUndoConfirmation);
     }
+
+    // ===== M3: confirmação do lugar por leitura (bipe ou digitação) =====
+    function scanPrefix(tipo) {
+      return tipo === 'DOCA' ? PREFIXO_DOCA : PREFIXO_ENTREGA;
+    }
+
+    function startConfirmation(tipo, alvoId, valor, now) {
+      scanPending = {
+        alvo: alvoId,
+        tipo,
+        valor,
+        esperado: scanPrefix(tipo) + valor,
+        ate: now.getTime() + JANELA_CONFIRMACAO_MS
+      };
+      scanFeedback = null;
+      renderScanStatus(now.getTime());
+    }
+
+    function setScanFeedback(texto, tipo, durationMs = 4000) {
+      scanFeedback = { texto, tipo, ate: Date.now() + durationMs };
+      renderScanStatus();
+    }
+
+    function renderScanStatus(now = Date.now()) {
+      if (scanPending && now >= scanPending.ate) scanPending = null;
+      if (scanFeedback && now >= scanFeedback.ate) scanFeedback = null;
+      const focused = document.activeElement === elements.scanInput;
+      let texto;
+      let estado;
+      if (scanFeedback) {
+        texto = scanFeedback.texto;
+        estado = scanFeedback.tipo === 'ok' ? 'scan-ok' : 'scan-warn';
+      } else if (scanPending) {
+        const restante = Math.max(0, Math.ceil((scanPending.ate - now) / 1000));
+        const alvo = scanPending.tipo === 'DOCA'
+          ? `da doca ${scanPending.valor}`
+          : `de ${scanPending.valor}`;
+        texto = `Confirme: bipe a etiqueta ${alvo} (${restante}s)${focused ? '' : ' · toque aqui'}`;
+        estado = 'scan-pending';
+      } else if (focused) {
+        texto = 'Pronto para bipar';
+        estado = 'scan-ready';
+      } else {
+        texto = 'Toque aqui para bipar';
+        estado = 'scan-nofocus';
+      }
+      elements.scanStatus.textContent = texto;
+      elements.scanBar.className = `scan-bar ${estado}`;
+    }
+
+    function focusScanInput() {
+      if (elements.activeOrderScreen.hidden) return;
+      const active = document.activeElement;
+      if (active === elements.orderSupportBadge || active === elements.scanManualInput) return;
+      elements.scanInput.focus({ preventScroll: true });
+      renderScanStatus();
+    }
+
+    async function handleScan(raw, fonte) {
+      const now = new Date();
+      const nowMs = now.getTime();
+      const texto = String(raw).trim().toUpperCase();
+      if (!texto) return;
+      if (texto === lastScan.texto && nowMs - lastScan.at < JANELA_LEITURA_REPETIDA_MS) return;
+      lastScan = { texto, at: nowMs };
+
+      const tipo = texto.startsWith(PREFIXO_DOCA)
+        ? 'DOCA'
+        : texto.startsWith(PREFIXO_ENTREGA) ? 'ENTREGA' : '';
+      if (!tipo) {
+        setScanFeedback(`Código não reconhecido: ${texto}`, 'aviso');
+        return;
+      }
+      const pending = scanPending && nowMs < scanPending.ate ? scanPending : null;
+      if (!pending || !orderIsActive()) {
+        scanPending = null;
+        setScanFeedback('Bipe depois de tocar o botão (até 30 s).', 'aviso');
+        return;
+      }
+      if (tipo !== pending.tipo) {
+        setScanFeedback(tipo === 'DOCA'
+          ? 'Esta é uma etiqueta de doca; bipe a do ponto de entrega.'
+          : 'Esta é uma etiqueta de ponto de entrega; bipe a da doca.', 'aviso');
+        return;
+      }
+
+      scanPending = null;
+      try {
+        const record = await createLocalEvent({
+          pedido: orderState.pedido,
+          doca: orderState.doca,
+          categoria: orderState.categoria,
+          atividade: 'LOCAL_CONFIRMADO',
+          cracha: sessionState.cracha,
+          cracha_apoio: '',
+          detalhe: texto,
+          fonte,
+          aparelho_id: sessionState.aparelho_id,
+          ref_event_id: pending.alvo
+        }, now);
+        orderState.event_ids = [...new Set([...orderState.event_ids, record.event_id])];
+        saveOrderState();
+        if (texto === pending.esperado) {
+          setScanFeedback(`✓ Confirmado: ${texto}`, 'ok', 6000);
+        } else {
+          setScanFeedback(
+            `Registrado ${texto}, mas o pedido está em ${pending.esperado}. Se tocou errado, use Desfazer.`,
+            'aviso',
+            8000
+          );
+        }
+        await refreshUndoControls();
+        void syncQueue();
+      } catch (error) {
+        setScanFeedback(error.message || 'Não foi possível salvar a confirmação.', 'aviso');
+      }
+    }
+
+    function finishScanInput() {
+      clearTimeout(scanIdleTimer);
+      scanIdleTimer = null;
+      const raw = elements.scanInput.value;
+      elements.scanInput.value = '';
+      if (raw.trim()) void handleScan(raw, 'bipe');
+    }
+
+    elements.scanInput.addEventListener('keydown', event => {
+      if (event.key === 'Enter' || event.keyCode === 13 || event.key === 'Tab') {
+        event.preventDefault();
+        finishScanInput();
+      }
+    });
+    elements.scanInput.addEventListener('beforeinput', event => {
+      if (event.inputType === 'insertLineBreak' || event.inputType === 'insertParagraph') {
+        event.preventDefault();
+        finishScanInput();
+      }
+    });
+    elements.scanInput.addEventListener('input', () => {
+      clearTimeout(scanIdleTimer);
+      scanIdleTimer = setTimeout(finishScanInput, 500);
+    });
+    elements.scanInput.addEventListener('focus', () => renderScanStatus());
+    elements.scanInput.addEventListener('blur', () => setTimeout(() => renderScanStatus(), 0));
+    elements.scanStatus.addEventListener('click', focusScanInput);
+
+    function closeManualScan() {
+      if (document.activeElement === elements.scanManualInput) elements.scanManualInput.blur();
+      elements.scanManualField.hidden = true;
+      elements.scanManualInput.value = '';
+    }
+
+    elements.scanManualToggle.addEventListener('click', () => {
+      if (!elements.scanManualField.hidden) {
+        closeManualScan();
+        focusScanInput();
+        return;
+      }
+      if (scanPending) {
+        scanPending.ate = Math.max(scanPending.ate, Date.now() + JANELA_CONFIRMACAO_MS);
+      }
+      elements.scanManualField.hidden = false;
+      elements.scanManualInput.focus();
+      renderScanStatus();
+    });
+
+    function confirmManualScan() {
+      let texto = elements.scanManualInput.value.trim().toUpperCase();
+      closeManualScan();
+      focusScanInput();
+      if (!texto) return;
+      if (!texto.includes(':')) {
+        if (!scanPending) {
+          setScanFeedback('Toque o botão primeiro e depois digite o código (até 30 s).', 'aviso');
+          return;
+        }
+        texto = scanPrefix(scanPending.tipo) + texto;
+      }
+      void handleScan(texto, 'manual');
+    }
+
+    elements.scanManualConfirm.addEventListener('click', confirmManualScan);
+    elements.scanManualInput.addEventListener('keydown', event => {
+      if (event.key === 'Enter' || event.keyCode === 13) {
+        event.preventDefault();
+        confirmManualScan();
+      }
+    });
+
+    document.addEventListener('click', event => {
+      if (elements.activeOrderScreen.hidden) return;
+      const target = event.target;
+      if (target instanceof Element && target.closest('input, select, textarea, label')) return;
+      setTimeout(focusScanInput, 0);
+    });
+
+    elements.orderNumber.addEventListener('input', () => {
+      if (/^(DOCA|ENTREGA):/i.test(elements.orderNumber.value.trim())) {
+        elements.orderNumber.value = '';
+        orderLabelBlockedAt = Date.now();
+        elements.orderNotice.textContent =
+          'Isso é uma etiqueta. Escolha a doca, digite o pedido e bipe a etiqueta depois de começar.';
+      }
+    });
+    elements.orderNumber.addEventListener('keydown', event => {
+      if ((event.key === 'Enter' || event.keyCode === 13) &&
+        Date.now() - orderLabelBlockedAt < 1500) {
+        event.preventDefault();
+      }
+    });
 
     elements.diagnosticBackButton.addEventListener('click', showSessionScreen);
 
