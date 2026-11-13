@@ -209,9 +209,10 @@
       box-shadow: 0 -2px 8px #102e4033;
     }
     .scan-bar[hidden] { display: none; }
-    .scan-row { display: grid; grid-template-columns: 1fr 92px auto; gap: 8px; align-items: center; }
+    .scan-row { display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: center; }
+    .scan-echo { margin: 0; font-size: .82rem; opacity: .95; word-break: break-all; }
     .scan-status { margin: 0; min-height: 44px; display: flex; align-items: center; font-size: 1.05rem; font-weight: 800; line-height: 1.25; cursor: pointer; }
-    .scan-bar input { min-height: 44px; padding: 6px 8px; font-size: .9rem; }
+    .scan-bar input { min-height: 52px; padding: 8px 10px; font-size: 1.05rem; background: #fff; }
     .scan-bar button { min-height: 56px; padding: 8px 12px; }
     .scan-bar.scan-ready { background: #1d5e3a; }
     .scan-bar.scan-nofocus { background: #7a4b00; }
@@ -220,7 +221,7 @@
     .scan-bar.scan-warn { background: #8a1c1c; }
     .scan-manual { display: grid; grid-template-columns: 1fr auto; gap: 8px; }
     .scan-manual[hidden] { display: none; }
-    body.has-scan-bar main { padding-bottom: 150px; }
+    body.has-scan-bar main { padding-bottom: 210px; }
 
     @media (max-width: 560px) {
       :root { font-size: 16px; }
@@ -369,11 +370,12 @@
     </section>
 
     <div id="scan-bar" class="scan-bar scan-nofocus" hidden>
+      <p id="scan-status" class="scan-status" role="status" aria-live="polite">Toque aqui para bipar</p>
       <div class="scan-row">
-        <p id="scan-status" class="scan-status" role="status" aria-live="polite">Toque aqui para bipar</p>
-        <input id="scan-input" inputmode="none" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" maxlength="80" aria-label="Campo de leitura do bipador">
+        <input id="scan-input" inputmode="none" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" maxlength="80" placeholder="Toque aqui e bipe" aria-label="Campo de leitura do bipador">
         <button id="scan-manual-toggle" class="secondary" type="button">Digitar</button>
       </div>
+      <p id="scan-echo" class="scan-echo" hidden></p>
       <div id="scan-manual-field" class="scan-manual" hidden>
         <input id="scan-manual-input" inputmode="text" autocomplete="off" autocapitalize="characters" autocorrect="off" spellcheck="false" maxlength="40" aria-label="Código da etiqueta (ex.: CF ou D1)" placeholder="Ex.: CF ou D1">
         <button id="scan-manual-confirm" type="button">Confirmar</button>
@@ -636,6 +638,7 @@
       offlineReady: document.getElementById('offline-ready'),
       scanBar: document.getElementById('scan-bar'),
       scanStatus: document.getElementById('scan-status'),
+      scanEcho: document.getElementById('scan-echo'),
       scanInput: document.getElementById('scan-input'),
       scanManualToggle: document.getElementById('scan-manual-toggle'),
       scanManualField: document.getElementById('scan-manual-field'),
@@ -2411,12 +2414,19 @@
       }
     }
 
+    function showScanEcho(texto) {
+      elements.scanEcho.textContent = texto;
+      elements.scanEcho.hidden = !texto;
+    }
+
     function finishScanInput() {
       clearTimeout(scanIdleTimer);
       scanIdleTimer = null;
       const raw = elements.scanInput.value;
       elements.scanInput.value = '';
-      if (raw.trim()) void handleScan(raw, 'bipe');
+      if (!raw.trim()) return;
+      showScanEcho(`${formatClock(Date.now())} · Recebido do bipador: "${raw}" (${raw.length} caracteres)`);
+      void handleScan(raw, 'bipe');
     }
 
     elements.scanInput.addEventListener('keydown', event => {
@@ -2432,6 +2442,7 @@
       }
     });
     elements.scanInput.addEventListener('input', () => {
+      showScanEcho(`Lendo: "${elements.scanInput.value}"`);
       clearTimeout(scanIdleTimer);
       scanIdleTimer = setTimeout(finishScanInput, 500);
     });
@@ -2480,6 +2491,16 @@
         event.preventDefault();
         confirmManualScan();
       }
+    });
+
+    elements.orderSupportBadge.addEventListener('keydown', event => {
+      if (event.key !== 'Enter' && event.keyCode !== 13) return;
+      const found = elements.orderSupportBadge.value.match(/(DOCA|ENTREGA):\S*/i);
+      if (!found) return;
+      event.preventDefault();
+      elements.orderSupportBadge.value = elements.orderSupportBadge.value.replace(found[0], '').trim();
+      showScanEcho(`${formatClock(Date.now())} · Etiqueta caiu no campo de apoio e foi redirecionada: "${found[0]}"`);
+      void handleScan(found[0], 'bipe');
     });
 
     document.addEventListener('click', event => {
