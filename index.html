@@ -220,6 +220,7 @@
     .scan-bar.scan-pending { background: #075b8d; }
     .scan-bar.scan-ok { background: #14532d; }
     .scan-bar.scan-warn { background: #8a1c1c; }
+    .scan-bar.scan-late { background: #4a3f8f; }
     .scan-manual { display: grid; grid-template-columns: 1fr auto; gap: 8px; }
     .scan-manual[hidden] { display: none; }
     body.has-scan-bar main { padding-bottom: 300px; }
@@ -2331,9 +2332,9 @@
     }
 
     function renderScanStatus(now = Date.now()) {
-      if (scanPending && now >= scanPending.ate) {
-        logScan(`pendência EXPIROU: ${scanPending.esperado}`);
-        scanPending = null;
+      if (scanPending && now >= scanPending.ate && !scanPending.atrasoAvisado) {
+        scanPending.atrasoAvisado = true;
+        logScan(`prazo passou: ${scanPending.esperado} segue aberta (atrasada)`);
       }
       if (scanFeedback && now >= scanFeedback.ate) scanFeedback = null;
       const focused = document.activeElement === elements.scanInput;
@@ -2343,12 +2344,18 @@
         texto = scanFeedback.texto;
         estado = scanFeedback.tipo === 'ok' ? 'scan-ok' : 'scan-warn';
       } else if (scanPending) {
-        const restante = Math.max(0, Math.ceil((scanPending.ate - now) / 1000));
         const alvo = scanPending.tipo === 'DOCA'
           ? `da doca ${scanPending.valor}`
           : `de ${scanPending.valor}`;
-        texto = `Confirme: bipe a etiqueta ${alvo} (${restante}s)${focused ? '' : ' · toque aqui'}`;
-        estado = 'scan-pending';
+        if (now < scanPending.ate) {
+          const restante = Math.max(0, Math.ceil((scanPending.ate - now) / 1000));
+          texto = `Confirme: bipe a etiqueta ${alvo} (${restante}s)${focused ? '' : ' · toque aqui'}`;
+          estado = 'scan-pending';
+        } else {
+          const atraso = Math.floor((now - scanPending.ate) / 1000);
+          texto = `Confirmação atrasada (+${atraso}s): bipe a etiqueta ${alvo}${focused ? '' : ' · toque aqui'}`;
+          estado = 'scan-late';
+        }
       } else if (focused) {
         texto = 'Pronto para bipar';
         estado = 'scan-ready';
@@ -2387,13 +2394,14 @@
         setScanFeedback(`Código não reconhecido: ${texto}`, 'aviso');
         return;
       }
-      const pending = scanPending && nowMs < scanPending.ate ? scanPending : null;
+      const pending = scanPending;
       if (!pending || !orderIsActive()) {
-        logScan(`${fonte} "${texto}" REJEITADO: sem pendência ativa`);
+        logScan(`${fonte} "${texto}" REJEITADO: nada para confirmar`);
         scanPending = null;
-        setScanFeedback('Bipe depois de tocar o botão (até 30 s).', 'aviso');
+        setScanFeedback('Nada para confirmar agora. Toque o botão do ponto de entrega e depois bipe.', 'aviso');
         return;
       }
+      const atrasoSeg = nowMs > pending.ate ? Math.round((nowMs - pending.ate) / 1000) : 0;
       if (tipo !== pending.tipo) {
         logScan(`${fonte} "${texto}" REJEITADO: tipo errado (esperava ${pending.tipo})`);
         setScanFeedback(tipo === 'DOCA'
@@ -2418,9 +2426,9 @@
         }, now);
         orderState.event_ids = [...new Set([...orderState.event_ids, record.event_id])];
         saveOrderState();
-        logScan(`${fonte} "${texto}" GRAVADO (esperado ${pending.esperado})`);
+        logScan(`${fonte} "${texto}" GRAVADO (esperado ${pending.esperado})${atrasoSeg ? ` +${atrasoSeg}s após o prazo` : ''}`);
         if (texto === pending.esperado) {
-          setScanFeedback(`✓ Confirmado: ${texto}`, 'ok', 6000);
+          setScanFeedback(`✓ Confirmado: ${texto}${atrasoSeg ? ` (${atrasoSeg}s após o prazo)` : ''}`, 'ok', 6000);
         } else {
           setScanFeedback(
             `Registrado ${texto}, mas o pedido está em ${pending.esperado}. Se tocou errado, use Desfazer.`,
@@ -2484,9 +2492,6 @@
         focusScanInput();
         return;
       }
-      if (scanPending) {
-        scanPending.ate = Math.max(scanPending.ate, Date.now() + JANELA_CONFIRMACAO_MS);
-      }
       elements.scanManualField.hidden = false;
       elements.scanManualInput.focus();
       renderScanStatus();
@@ -2499,7 +2504,7 @@
       if (!texto) return;
       if (!texto.includes(':')) {
         if (!scanPending) {
-          setScanFeedback('Toque o botão primeiro e depois digite o código (até 30 s).', 'aviso');
+          setScanFeedback('Nada para confirmar agora. Toque o botão do ponto de entrega e depois digite o código.', 'aviso');
           return;
         }
         texto = scanPrefix(scanPending.tipo) + texto;
