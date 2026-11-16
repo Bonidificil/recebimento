@@ -683,6 +683,7 @@
     let undoConfirmationTimer = null;
     let scanPending = null;
     const scanLogLines = [];
+    let rebindingScan = false;
     let scanFeedback = null;
     let lastScan = { texto: '', at: 0 };
     let scanIdleTimer = null;
@@ -2367,6 +2368,18 @@
       elements.scanBar.className = `scan-bar ${estado}`;
     }
 
+    function rebindScanInput(motivo) {
+      if (elements.activeOrderScreen.hidden) return;
+      const active = document.activeElement;
+      if (active === elements.orderSupportBadge || active === elements.scanManualInput) return;
+      rebindingScan = true;
+      elements.scanInput.blur();
+      elements.scanInput.focus({ preventScroll: true });
+      rebindingScan = false;
+      logScan(`campo religado (${motivo})`);
+      renderScanStatus();
+    }
+
     function focusScanInput() {
       if (elements.activeOrderScreen.hidden) return;
       const active = document.activeElement;
@@ -2476,9 +2489,10 @@
       clearTimeout(scanIdleTimer);
       scanIdleTimer = setTimeout(finishScanInput, 500);
     });
-    elements.scanInput.addEventListener('focus', () => { logScan('campo de leitura: COM foco'); renderScanStatus(); });
-    elements.scanInput.addEventListener('blur', () => { logScan('campo de leitura: SEM foco'); setTimeout(() => renderScanStatus(), 0); });
-    elements.scanStatus.addEventListener('click', focusScanInput);
+    elements.scanInput.addEventListener('focus', () => { if (!rebindingScan) logScan('campo de leitura: COM foco'); renderScanStatus(); });
+    elements.scanInput.addEventListener('blur', () => { if (!rebindingScan) logScan('campo de leitura: SEM foco'); setTimeout(() => renderScanStatus(), 0); });
+    elements.scanInput.addEventListener('click', () => rebindScanInput('toque na caixa'));
+    elements.scanStatus.addEventListener('click', () => rebindScanInput('toque na barra'));
 
     function closeManualScan() {
       if (document.activeElement === elements.scanManualInput) elements.scanManualInput.blur();
@@ -2534,7 +2548,7 @@
       if (elements.activeOrderScreen.hidden) return;
       const target = event.target;
       if (target instanceof Element && target.closest('input, select, textarea, label')) return;
-      setTimeout(focusScanInput, 0);
+      rebindScanInput('toque em botão');
     });
 
     elements.orderNumber.addEventListener('input', () => {
