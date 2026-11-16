@@ -210,6 +210,7 @@
     }
     .scan-bar[hidden] { display: none; }
     .scan-row { display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: center; }
+    .scan-log[hidden], .scan-echo[hidden] { display: none; }
     .scan-log { white-space: pre-line; font-size: .74rem; line-height: 1.3; opacity: .95; word-break: break-all; max-height: 7.2em; overflow: hidden; }
     .scan-echo { margin: 0; font-size: .82rem; opacity: .95; word-break: break-all; }
     .scan-status { margin: 0; min-height: 44px; display: flex; align-items: center; font-size: 1.05rem; font-weight: 800; line-height: 1.25; cursor: pointer; }
@@ -223,7 +224,8 @@
     .scan-bar.scan-late { background: #4a3f8f; }
     .scan-manual { display: grid; grid-template-columns: 1fr auto; gap: 8px; }
     .scan-manual[hidden] { display: none; }
-    body.has-scan-bar main { padding-bottom: 300px; }
+    body.has-scan-bar main { padding-bottom: 170px; }
+    body.has-scan-bar.scan-diag main { padding-bottom: 300px; }
 
     @media (max-width: 560px) {
       :root { font-size: 16px; }
@@ -378,7 +380,7 @@
         <button id="scan-manual-toggle" class="secondary" type="button">Digitar</button>
       </div>
       <p id="scan-echo" class="scan-echo" hidden></p>
-      <div id="scan-log" class="scan-log" aria-label="Diagnóstico das leituras"></div>
+      <div id="scan-log" class="scan-log" aria-label="Diagnóstico das leituras" hidden></div>
       <div id="scan-manual-field" class="scan-manual" hidden>
         <input id="scan-manual-input" inputmode="text" autocomplete="off" autocapitalize="characters" autocorrect="off" spellcheck="false" maxlength="40" aria-label="Código da etiqueta (ex.: CF ou D1)" placeholder="Ex.: CF ou D1">
         <button id="scan-manual-confirm" type="button">Confirmar</button>
@@ -2467,9 +2469,10 @@
       }
     }
 
+    let scanDiagnostics = false;
     function showScanEcho(texto) {
       elements.scanEcho.textContent = texto;
-      elements.scanEcho.hidden = !texto;
+      elements.scanEcho.hidden = !texto || !scanDiagnostics;
     }
 
     function finishScanInput() {
@@ -2504,7 +2507,19 @@
     elements.scanInput.addEventListener('focus', () => { if (!rebindingScan) logScan('campo de leitura: COM foco'); renderScanStatus(); });
     elements.scanInput.addEventListener('blur', () => { if (!rebindingScan) { scanBound = false; logScan('campo de leitura: SEM foco'); } setTimeout(() => renderScanStatus(), 0); });
     elements.scanInput.addEventListener('click', () => rebindScanInput('toque na caixa'));
-    elements.scanStatus.addEventListener('click', () => rebindScanInput('toque na barra'));
+    let scanStatusTaps = [];
+    elements.scanStatus.addEventListener('click', () => {
+      rebindScanInput('toque na barra');
+      const agora = Date.now();
+      scanStatusTaps = scanStatusTaps.filter(t => agora - t < 3000).concat(agora);
+      if (scanStatusTaps.length >= 5) {
+        scanStatusTaps = [];
+        scanDiagnostics = !scanDiagnostics;
+        elements.scanLog.hidden = !scanDiagnostics;
+        elements.scanEcho.hidden = !scanDiagnostics || !elements.scanEcho.textContent;
+        document.body.classList.toggle('scan-diag', scanDiagnostics);
+      }
+    });
 
     function closeManualScan() {
       if (document.activeElement === elements.scanManualInput) elements.scanManualInput.blur();
