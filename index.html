@@ -684,6 +684,8 @@
     let scanPending = null;
     const scanLogLines = [];
     let rebindingScan = false;
+    let scanBound = false;
+    let scanInputModeTimer = null;
     let scanFeedback = null;
     let lastScan = { texto: '', at: 0 };
     let scanIdleTimer = null;
@@ -1380,7 +1382,10 @@
       document.body.classList.toggle('has-scan-bar', onActiveOrderScreen);
       if (!onActiveOrderScreen) closeManualScan();
       renderSystemOutageNotice();
-      if (onActiveOrderScreen) setTimeout(focusScanInput, 0);
+      if (onActiveOrderScreen) {
+        scanBound = false;
+        setTimeout(focusScanInput, 0);
+      }
     }
 
     function showSessionScreen() {
@@ -2350,18 +2355,18 @@
           : `de ${scanPending.valor}`;
         if (now < scanPending.ate) {
           const restante = Math.max(0, Math.ceil((scanPending.ate - now) / 1000));
-          texto = `Confirme: bipe a etiqueta ${alvo} (${restante}s)${focused ? '' : ' · toque aqui'}`;
+          texto = `Confirme: bipe a etiqueta ${alvo} (${restante}s)${focused && scanBound ? '' : ' · toque na caixa branca'}`;
           estado = 'scan-pending';
         } else {
           const atraso = Math.floor((now - scanPending.ate) / 1000);
-          texto = `Confirmação atrasada (+${atraso}s): bipe a etiqueta ${alvo}${focused ? '' : ' · toque aqui'}`;
+          texto = `Confirmação atrasada (+${atraso}s): bipe a etiqueta ${alvo}${focused && scanBound ? '' : ' · toque na caixa branca'}`;
           estado = 'scan-late';
         }
-      } else if (focused) {
+      } else if (focused && scanBound) {
         texto = 'Pronto para bipar';
         estado = 'scan-ready';
       } else {
-        texto = 'Toque aqui para bipar';
+        texto = 'Toque na caixa branca para bipar';
         estado = 'scan-nofocus';
       }
       elements.scanStatus.textContent = texto;
@@ -2373,9 +2378,15 @@
       const active = document.activeElement;
       if (active === elements.orderSupportBadge || active === elements.scanManualInput) return;
       rebindingScan = true;
+      clearTimeout(scanInputModeTimer);
+      elements.scanInput.setAttribute('inputmode', 'text');
       elements.scanInput.blur();
       elements.scanInput.focus({ preventScroll: true });
       rebindingScan = false;
+      scanInputModeTimer = setTimeout(() => {
+        elements.scanInput.setAttribute('inputmode', 'none');
+      }, 250);
+      scanBound = true;
       logScan(`campo religado (${motivo})`);
       renderScanStatus();
     }
@@ -2469,6 +2480,7 @@
       if (!raw.trim()) return;
       showScanEcho(`${formatClock(Date.now())} · Recebido do bipador: "${raw}" (${raw.length} caracteres)`);
       logScan(`texto chegou ao campo: "${raw}"`);
+      scanBound = true;
       void handleScan(raw, 'bipe');
     }
 
@@ -2490,7 +2502,7 @@
       scanIdleTimer = setTimeout(finishScanInput, 500);
     });
     elements.scanInput.addEventListener('focus', () => { if (!rebindingScan) logScan('campo de leitura: COM foco'); renderScanStatus(); });
-    elements.scanInput.addEventListener('blur', () => { if (!rebindingScan) logScan('campo de leitura: SEM foco'); setTimeout(() => renderScanStatus(), 0); });
+    elements.scanInput.addEventListener('blur', () => { if (!rebindingScan) { scanBound = false; logScan('campo de leitura: SEM foco'); } setTimeout(() => renderScanStatus(), 0); });
     elements.scanInput.addEventListener('click', () => rebindScanInput('toque na caixa'));
     elements.scanStatus.addEventListener('click', () => rebindScanInput('toque na barra'));
 
@@ -2515,6 +2527,7 @@
       let texto = elements.scanManualInput.value.trim().toUpperCase();
       closeManualScan();
       focusScanInput();
+      if (document.activeElement === elements.scanInput) scanBound = true;
       if (!texto) return;
       if (!texto.includes(':')) {
         if (!scanPending) {
@@ -2544,11 +2557,18 @@
       void handleScan(found[0], 'bipe');
     });
 
+    document.addEventListener('mousedown', event => {
+      if (elements.activeOrderScreen.hidden) return;
+      if (document.activeElement !== elements.scanInput) return;
+      const target = event.target;
+      if (target instanceof Element && target.closest('button')) event.preventDefault();
+    }, true);
+
     document.addEventListener('click', event => {
       if (elements.activeOrderScreen.hidden) return;
       const target = event.target;
       if (target instanceof Element && target.closest('input, select, textarea, label')) return;
-      rebindScanInput('toque em botão');
+      focusScanInput();
     });
 
     elements.orderNumber.addEventListener('input', () => {
