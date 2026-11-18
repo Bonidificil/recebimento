@@ -41,6 +41,71 @@
       max-width: 850px;
       margin: auto;
     }
+    #menu-button {
+      min-width: 56px;
+      min-height: 56px;
+      margin-left: auto;
+      color: white;
+      background: transparent;
+      border: 2px solid #ffffff88;
+      font-size: 1.5rem;
+    }
+    #menu-panel {
+      position: fixed;
+      z-index: 5;
+      top: 78px;
+      right: 14px;
+      width: min(420px, calc(100vw - 28px));
+      max-height: calc(100vh - 96px);
+      overflow: auto;
+      padding: 12px;
+      border: 2px solid #9aadb9;
+      border-radius: 12px;
+      background: white;
+      box-shadow: 0 8px 24px #102e4033;
+    }
+    #menu-panel[hidden] { display: none; }
+    #menu-panel section { margin: 8px 0; }
+    .menu-actions { display: grid; gap: 8px; }
+    .wizard-step { display: grid; gap: 12px; }
+    .wizard-step[hidden] { display: none; }
+    .wizard-step h1 { font-size: 1.5rem; }
+    .wizard-indicator { color: #526878; font-weight: 750; }
+    .wizard-options { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 12px; }
+    .wizard-options button {
+      min-height: 88px;
+      font-size: 1.5rem;
+      background: #f5f8fa;
+      color: #172b3a;
+      border: 3px solid #718795;
+    }
+    .wizard-options button[aria-pressed="true"] {
+      color: white;
+      background: #075b8d;
+      border-color: #075b8d;
+    }
+    #support-code-input, #order-number { min-height: 88px; font-size: 1.5rem; }
+    #order-summary { display: grid; gap: 8px; }
+    .summary-line {
+      display: grid;
+      grid-template-columns: 110px 1fr auto;
+      align-items: center;
+      gap: 8px;
+      min-height: 56px;
+      padding: 8px 0;
+      border-bottom: 1px solid #d5e0e6;
+    }
+    .wizard-footer {
+      position: sticky;
+      bottom: 0;
+      z-index: 2;
+      display: grid;
+      gap: 8px;
+      margin: 14px -14px -14px;
+      padding: 10px 14px;
+      border-top: 1px solid #d5e0e6;
+      background: white;
+    }
 
     h1 { margin: 0; font-size: 1.15rem; }
     main { max-width: 850px; margin: auto; padding: 18px 14px 40px; }
@@ -237,7 +302,67 @@
       .header-inner { align-items: flex-start; flex-direction: column; }
       .event { grid-template-columns: 1fr; }
     }
-  </style>
+      /* ===== CAMADA VISUAL A1 (só CSS; não muda ids, textos nem lógica) ===== */
+    [hidden] { display: none !important; }
+    :root { --marinho:#123c57; --azul:#075b8d; --verde:#1d6b3f; --cinza:#526878; --borda:#d5e0e6; --vermelho:#b3261e; }
+    body { background: #eef3f6; }
+
+    /* Cabeçalho compacto: título + contadores à esquerda, menu à direita */
+    header { z-index: 10; padding: 8px 14px; background: linear-gradient(135deg, #123c57, #0d2e45); }
+    .header-inner { display: grid; grid-template-columns: 1fr auto; grid-template-areas: "titulo menu" "status menu"; align-items: center; gap: 2px 10px; }
+    .header-inner h1 { grid-area: titulo; font-size: 1.1rem; letter-spacing: .2px; }
+    .header-inner .status-line { grid-area: status; font-size: .78rem; gap: 2px 10px; }
+    #menu-button { grid-area: menu; margin: 0; min-width: 56px; min-height: 56px; border-radius: 16px; background: rgba(255,255,255,.12); border: 2px solid rgba(255,255,255,.4); font-size: 1.7rem; line-height: 1; }
+
+    /* Menu em tela cheia, ABAIXO do cabeçalho: o botão ≡ continua clicável para fechar */
+    #menu-panel { top: 0; left: 0; right: 0; bottom: 0; width: auto; max-height: none; padding: 92px 14px 24px; border: 0; border-radius: 0; background: #eef3f6; box-shadow: none; overflow: auto; }
+    .menu-actions { display: grid; gap: 12px; }
+    #sync-menu-button, #events-menu-button, #change-operator { display: flex; align-items: center; min-height: 72px; padding: 0 20px; border-radius: 16px; border: 2px solid var(--borda); background: #fff; color: var(--marinho); font-size: 1.2rem; font-weight: 800; text-align: left; text-decoration: none; box-shadow: 0 1px 0 #cfdce4; }
+    #menu-panel section { margin: 12px 0; }
+
+    /* Entrada */
+    #start-screen { padding: 22px 4px; border: 0; background: transparent; box-shadow: none; }
+    #start-heading { font-size: 1.9rem; line-height: 1.15; color: var(--marinho); margin-bottom: 8px; }
+    #session-badge { min-height: 96px; font-size: 2rem; font-weight: 800; text-align: center; border: 3px solid var(--azul); border-radius: 18px; text-transform: uppercase; }
+    #start-shift-button { min-height: 88px; font-size: 1.5rem; border-radius: 20px; background: linear-gradient(135deg, #23864f, var(--verde)); box-shadow: 0 8px 18px rgba(29,107,63,.3); }
+
+    /* Início: "Novo pedido" é o herói; "Sistema caiu" vira ação discreta embaixo */
+    #turn-screen { display: flex; flex-direction: column; gap: 14px; padding: 8px 4px; border: 0; background: transparent; box-shadow: none; }
+    #turn-screen .operator-heading { display: contents; }
+    #turn-heading { order: 1; margin-top: 10px; font-size: 1.8rem; line-height: 1.15; color: var(--marinho); }
+    #operator-summary { order: 2; margin: 0; padding: 8px 14px; border-radius: 12px; background: #dcebf4; color: var(--marinho); font-size: .95rem; font-weight: 700; justify-self: start; }
+    #new-order-button { order: 3; width: 100%; min-height: 132px; border-radius: 22px; font-size: 1.8rem; background: linear-gradient(135deg, #23864f, var(--verde)); box-shadow: 0 10px 22px rgba(29,107,63,.35); }
+    #order-form { order: 4; display: flex; flex-direction: column; }
+    #system-outage-turn-button { order: 8; min-height: 56px; background: #fff; color: var(--vermelho); border: 2px solid #e5b5b1; }
+    #turn-screen .undo-section { order: 9; margin-top: 4px; padding-top: 12px; }
+    #turn-screen .undo-section > button { justify-self: stretch; min-height: 56px; }
+    #turn-screen:has(#order-form:not([hidden])) :is(#turn-heading, #operator-summary) { display: none; }
+
+    /* Passos do novo pedido */
+    .wizard-step { gap: 14px; }
+    .wizard-step h1 { font-size: 1.9rem; line-height: 1.15; color: var(--marinho); }
+    .wizard-indicator { display: inline-block; justify-self: start; margin: 0; padding: 4px 12px; border-radius: 99px; background: #dcebf4; color: var(--azul); font-size: .8rem; letter-spacing: .4px; text-transform: uppercase; }
+    #dock-buttons, #people-buttons { grid-template-columns: 1fr; }
+    #category-buttons { grid-template-columns: 1fr 1fr; }
+    .wizard-options button { min-height: 96px; border-radius: 18px; border: 2px solid #b7c9d4; background: #fff; box-shadow: 0 3px 0 #cfdce4; font-size: 1.6rem; font-weight: 800; }
+    .wizard-options button[aria-pressed="true"] { border-color: var(--azul); background: var(--azul); color: #fff; box-shadow: none; }
+    #order-number, #support-code-input { min-height: 96px; font-size: 2rem; font-weight: 800; text-align: center; border: 3px solid var(--azul); border-radius: 18px; letter-spacing: 1px; }
+    #skip-category-button, #support-skip-button { min-height: 64px; border-radius: 16px; }
+    #support-continue-button { min-height: 80px; border-radius: 18px; font-size: 1.4rem; }
+
+    /* Resumo */
+    #order-summary { padding: 4px 14px; border: 2px solid var(--borda); border-radius: 18px; background: #fff; gap: 0; }
+    .summary-line { grid-template-columns: 96px 1fr auto; min-height: 64px; padding: 6px 0; }
+    .summary-line:last-child { border-bottom: 0; }
+    .summary-line span { color: var(--cinza); font-size: .95rem; }
+    .summary-line strong { font-size: 1.25rem; }
+    .summary-line button { min-height: 48px; padding: 0 16px; border-radius: 12px; background: transparent; border: 2px solid #b7c9d4; color: var(--azul); }
+    #begin-order-button { min-height: 88px; border-radius: 20px; font-size: 1.5rem; background: linear-gradient(135deg, #23864f, var(--verde)); box-shadow: 0 8px 18px rgba(29,107,63,.3); }
+
+    /* Rodapé "Voltar" dos passos */
+    .wizard-footer { margin: 16px -10px 0; padding: 10px 14px; background: #eef3f6; border-top: 1px solid var(--borda); }
+    #wizard-back-button { min-height: 64px; border-radius: 16px; background: #fff; border: 2px solid #b7c9d4; color: var(--marinho); font-size: 1.15rem; }
+</style>
 </head>
 <body>
   <header>
@@ -249,20 +374,44 @@
         <span class="pill good" id="sent-count">Enviados: 0</span>
         <span class="pill warn" id="error-count">Com erro: 0</span>
       </div>
+      <button id="menu-button" type="button" aria-label="Menu" aria-expanded="false" hidden>≡</button>
     </div>
   </header>
 
   <main>
+    <aside id="menu-panel" hidden aria-label="Menu">
+      <div class="menu-actions">
+        <button id="sync-menu-button" type="button">Sincronização</button>
+        <button id="events-menu-button" type="button">Eventos</button>
+        <a id="change-operator" class="text-link" href="#">Trocar operador</a>
+      </div>
+      <section id="sync-screen" aria-labelledby="export-heading" hidden>
+        <h2 id="export-heading">Sincronização</h2>
+        <p class="muted">Eventos pendentes são enviados em ordem. Se a resposta do servidor não puder ser lida, o evento permanece pendente e será reenviado com o mesmo identificador.</p>
+        <div class="export-actions">
+          <button id="export-csv" class="secondary" type="button">Exportar CSV</button>
+          <button id="copy-json" class="secondary" type="button">Copiar JSON</button>
+        </div>
+        <div id="duplicate-test-actions" hidden>
+          <button id="retry-last-sent-button" class="secondary" type="button">Reenviar último enviado</button>
+          <p id="duplicate-test-message" class="muted" role="status" aria-live="polite" hidden></p>
+        </div>
+        <p id="action-message" class="muted" role="status" aria-live="polite"></p>
+      </section>
+      <section id="events-screen" aria-labelledby="events-heading" hidden>
+        <h2 id="events-heading">Eventos neste aparelho</h2>
+        <div id="event-list" class="events" aria-live="polite"></div>
+      </section>
+    </aside>
     <div id="storage-notice" class="notice" role="status" hidden></div>
     <div id="network-notice" class="notice" role="status" hidden></div>
     <div id="system-outage-notice" class="system-outage" role="status" aria-live="polite" hidden></div>
 
     <section id="start-screen" aria-labelledby="start-heading" hidden>
-      <h2 id="start-heading">Início de turno</h2>
+      <h1 id="start-heading">Qual é o seu código?</h1>
       <form id="start-form" novalidate>
         <label class="full">
-          Crachá
-          <input id="session-badge" name="badge" maxlength="80" autocomplete="off" required>
+          <input id="session-badge" name="badge" maxlength="80" autocomplete="off" autocapitalize="characters" required>
           <span id="badge-notice" class="field-notice" aria-live="polite"></span>
         </label>
         <label id="device-name-field" class="full">
@@ -278,32 +427,54 @@
 
     <section id="turn-screen" aria-labelledby="turn-heading" hidden>
       <div class="operator-heading">
-        <h2 id="turn-heading">Novo pedido</h2>
+        <h1 id="turn-heading">Pronto para o próximo pedido</h1>
         <p id="operator-summary"></p>
-        <a id="change-operator" class="text-link" href="#">Trocar operador</a>
         <button id="system-outage-turn-button" type="button">Sistema caiu</button>
       </div>
-      <form id="order-form" novalidate>
-        <div class="choice-group">
-          <strong>Doca</strong>
-          <div id="dock-buttons" class="choice-buttons" role="group" aria-label="Selecione a doca"></div>
+      <button id="new-order-button" type="button">＋ Novo pedido</button>
+      <form id="order-form" novalidate hidden>
+        <div id="wizard-dock-step" class="wizard-step" hidden>
+          <p class="wizard-indicator">Novo pedido · 1 de 4</p>
+          <h1>Em qual doca?</h1>
+          <div id="dock-buttons" class="wizard-options" role="group" aria-label="Selecione a doca"></div>
           <span id="dock-notice" class="field-notice" aria-live="polite"></span>
         </div>
-        <label class="full">
-          Número do pedido
+        <div id="wizard-number-step" class="wizard-step" hidden>
+          <p class="wizard-indicator">Novo pedido · 2 de 4</p>
+          <h1>Número do pedido</h1>
           <input id="order-number" name="order" maxlength="100" autocomplete="off" required>
           <span id="order-notice" class="field-notice" aria-live="polite"></span>
-        </label>
-        <div class="choice-group">
-          <strong>Categoria (opcional)</strong>
-          <div id="category-buttons" class="choice-buttons" role="group" aria-label="Selecione a categoria"></div>
         </div>
-        <div class="choice-group">
-          <strong>Número de pessoas</strong>
-          <div id="people-buttons" class="choice-buttons" role="group" aria-label="Selecione o número de pessoas"></div>
+        <div id="wizard-category-step" class="wizard-step" hidden>
+          <p class="wizard-indicator">Novo pedido · 3 de 4</p>
+          <h1>O que está chegando?</h1>
+          <div id="category-buttons" class="wizard-options" role="group" aria-label="Selecione a categoria"></div>
+          <button id="skip-category-button" class="secondary" type="button">Pular</button>
         </div>
-        <div class="form-actions">
-          <button id="begin-order-button" type="submit">Começar pedido</button>
+        <div id="wizard-people-step" class="wizard-step" hidden>
+          <p class="wizard-indicator">Novo pedido · 4 de 4</p>
+          <h1>Quantas pessoas neste pedido?</h1>
+          <div id="people-buttons" class="wizard-options" role="group" aria-label="Selecione o número de pessoas"></div>
+        </div>
+        <div id="wizard-support-step" class="wizard-step" hidden>
+          <p class="wizard-indicator">Novo pedido · Apoio</p>
+          <h1>Código de quem está ajudando</h1>
+          <input id="support-code-input" maxlength="80" autocomplete="off" autocapitalize="characters" placeholder="OP02">
+          <button id="support-continue-button" type="button">Continuar</button>
+          <button id="support-skip-button" class="secondary" type="button">Pular</button>
+        </div>
+        <div id="wizard-summary-step" class="wizard-step" hidden>
+          <h1>Confira e comece</h1>
+          <div id="order-summary">
+            <div class="summary-line"><span>Doca</span><strong id="summary-dock"></strong><button id="edit-dock" type="button" class="secondary">mudar</button></div>
+            <div class="summary-line"><span>Pedido</span><strong id="summary-number"></strong><button id="edit-number" type="button" class="secondary">mudar</button></div>
+            <div class="summary-line"><span>Chegando</span><strong id="summary-category"></strong><button id="edit-category" type="button" class="secondary">mudar</button></div>
+            <div class="summary-line"><span>Equipe</span><strong id="summary-team"></strong><button id="edit-team" type="button" class="secondary">mudar</button></div>
+          </div>
+          <button id="begin-order-button" type="button">▶ Começar pedido</button>
+        </div>
+        <div class="wizard-footer">
+          <button id="wizard-back-button" class="secondary" type="button">← Voltar</button>
         </div>
       </form>
       <div class="undo-section">
@@ -474,24 +645,6 @@
       </form>
     </section>
 
-    <section id="sync-screen" aria-labelledby="export-heading" hidden>
-      <h2 id="export-heading">Sincronização</h2>
-      <p class="muted">Eventos pendentes são enviados em ordem. Se a resposta do servidor não puder ser lida, o evento permanece pendente e será reenviado com o mesmo identificador.</p>
-      <div class="export-actions">
-        <button id="export-csv" class="secondary" type="button">Exportar CSV</button>
-        <button id="copy-json" class="secondary" type="button">Copiar JSON</button>
-      </div>
-      <div id="duplicate-test-actions" hidden>
-        <button id="retry-last-sent-button" class="secondary" type="button">Reenviar último enviado</button>
-        <p id="duplicate-test-message" class="muted" role="status" aria-live="polite" hidden></p>
-      </div>
-      <p id="action-message" class="muted" role="status" aria-live="polite"></p>
-    </section>
-
-    <section id="events-screen" aria-labelledby="events-heading" hidden>
-      <h2 id="events-heading">Eventos neste aparelho</h2>
-      <div id="event-list" class="events" aria-live="polite"></div>
-    </section>
   </main>
 
   <script>
@@ -564,6 +717,30 @@
       startScreen: document.getElementById('start-screen'),
       turnScreen: document.getElementById('turn-screen'),
       activeOrderScreen: document.getElementById('active-order-screen'),
+      menuButton: document.getElementById('menu-button'),
+      menuPanel: document.getElementById('menu-panel'),
+      syncMenuButton: document.getElementById('sync-menu-button'),
+      eventsMenuButton: document.getElementById('events-menu-button'),
+      newOrderButton: document.getElementById('new-order-button'),
+      wizardDockStep: document.getElementById('wizard-dock-step'),
+      wizardNumberStep: document.getElementById('wizard-number-step'),
+      wizardCategoryStep: document.getElementById('wizard-category-step'),
+      wizardPeopleStep: document.getElementById('wizard-people-step'),
+      wizardSupportStep: document.getElementById('wizard-support-step'),
+      wizardSummaryStep: document.getElementById('wizard-summary-step'),
+      supportCodeInput: document.getElementById('support-code-input'),
+      supportContinueButton: document.getElementById('support-continue-button'),
+      supportSkipButton: document.getElementById('support-skip-button'),
+      skipCategoryButton: document.getElementById('skip-category-button'),
+      wizardBackButton: document.getElementById('wizard-back-button'),
+      editDock: document.getElementById('edit-dock'),
+      editNumber: document.getElementById('edit-number'),
+      editCategory: document.getElementById('edit-category'),
+      editTeam: document.getElementById('edit-team'),
+      summaryDock: document.getElementById('summary-dock'),
+      summaryNumber: document.getElementById('summary-number'),
+      summaryCategory: document.getElementById('summary-category'),
+      summaryTeam: document.getElementById('summary-team'),
       systemOutageNotice: document.getElementById('system-outage-notice'),
       undoButtons: Array.from(document.querySelectorAll('.undo-button')),
       undoConfirmations: Array.from(document.querySelectorAll('.undo-confirmation')),
@@ -665,6 +842,7 @@
       doca: '',
       categoria: '',
       n_pessoas: '',
+      apoio: '',
       inicio_ts: 0,
       event_ids: [],
       ultimo_n_pessoas: '1',
@@ -678,6 +856,8 @@
     let selectedDock = '';
     let selectedCategory = '';
     let selectedPeople = '1';
+    let wizardDraft = null;
+    let wizardEditMode = false;
     const lastActionTimes = new Map();
     let tripMessageState = null;
     let returnMessageState = null;
@@ -807,6 +987,7 @@
         orderState.doca = typeof saved.doca === 'string' ? saved.doca : '';
         orderState.categoria = typeof saved.categoria === 'string' ? saved.categoria : '';
         orderState.n_pessoas = typeof saved.n_pessoas === 'string' ? saved.n_pessoas : '';
+        orderState.apoio = typeof saved.apoio === 'string' ? saved.apoio.trim().toUpperCase() : '';
         orderState.inicio_ts = Number.isFinite(saved.inicio_ts) ? saved.inicio_ts : 0;
         orderState.event_ids = Array.isArray(saved.event_ids)
           ? saved.event_ids.filter(id => typeof id === 'string')
@@ -855,6 +1036,7 @@
       orderState.doca = '';
       orderState.categoria = '';
       orderState.n_pessoas = '';
+      orderState.apoio = '';
       orderState.inicio_ts = 0;
       orderState.event_ids = [];
       orderState.compras_aguardando = null;
@@ -1211,7 +1393,11 @@
           sessionState.aparelho_id,
           orderState.ultimo_n_pessoas
         );
+        const apoioPreservado = orderState.pedido && rebuilt.order.pedido === orderState.pedido
+          ? orderState.apoio
+          : '';
         Object.assign(orderState, rebuilt.order);
+        orderState.apoio = apoioPreservado;
         sessionState.sistema_caiu = rebuilt.sistema_caiu;
         tripMessageState = rebuilt.tripMessage;
         returnMessageState = rebuilt.returnMessage;
@@ -1260,22 +1446,43 @@
       elements.peopleButtons.replaceChildren();
       elements.cameraButtons.replaceChildren();
       for (const dock of DOCAS) {
-        createChoiceButton(elements.dockButtons, dock, dock, value => {
+        createChoiceButton(elements.dockButtons, `Doca ${dock.slice(1)}`, dock, value => {
           selectedDock = value;
           elements.dockNotice.textContent = '';
           updateOrderChoices();
+          if (wizardDraft) {
+            wizardDraft.doca = value;
+            if (wizardEditMode) showWizardStep('summary');
+            else showWizardStep('number');
+          }
         });
       }
       for (const category of CATEGORIAS) {
         createChoiceButton(elements.categoryButtons, category, category, value => {
-          selectedCategory = selectedCategory === value ? '' : value;
+          selectedCategory = value;
           updateOrderChoices();
+          if (wizardDraft) {
+            wizardDraft.categoria = value;
+            if (wizardEditMode) showWizardStep('summary');
+            else showWizardStep('people');
+          }
         });
       }
       for (const value of ['1', '2', '3']) {
-        createChoiceButton(elements.peopleButtons, value === '3' ? '3+' : value, value, selected => {
+        const label = value === '1' ? 'Só eu' : value === '2' ? '2 pessoas' : '3 ou mais';
+        createChoiceButton(elements.peopleButtons, label, value, selected => {
           selectedPeople = selected;
           updateOrderChoices();
+          if (wizardDraft) {
+            wizardDraft.n_pessoas = selected;
+            wizardDraft.apoio = selected === '1' ? '' : wizardDraft.apoio;
+            if (selected === '1') {
+              if (wizardEditMode) showWizardStep('summary');
+              else showWizardStep('summary');
+            } else {
+              showWizardStep('support');
+            }
+          }
         });
       }
       for (const camera of CAMARAS) {
@@ -1284,6 +1491,110 @@
         });
       }
       updateOrderChoices();
+    }
+
+    let wizardStep = '';
+    let wizardHistoryDepth = 0;
+    let menuOpen = false;
+
+    function closeWizard() {
+      elements.orderForm.hidden = true;
+      elements.newOrderButton.hidden = false;
+      elements.turnScreen.querySelector('.undo-section').hidden = false;
+      wizardDraft = null;
+      wizardStep = '';
+      wizardEditMode = false;
+    }
+
+    function showWizardStep(step, pushHistory = true) {
+      wizardStep = step;
+      for (const element of [
+        elements.wizardDockStep,
+        elements.wizardNumberStep,
+        elements.wizardCategoryStep,
+        elements.wizardPeopleStep,
+        elements.wizardSupportStep,
+        elements.wizardSummaryStep
+      ]) {
+        element.hidden = true;
+      }
+      const stepElements = {
+        dock: elements.wizardDockStep,
+        number: elements.wizardNumberStep,
+        category: elements.wizardCategoryStep,
+        people: elements.wizardPeopleStep,
+        support: elements.wizardSupportStep,
+        summary: elements.wizardSummaryStep
+      };
+      stepElements[step].hidden = false;
+      elements.orderForm.hidden = false;
+      elements.newOrderButton.hidden = true;
+      elements.turnScreen.querySelector('.undo-section').hidden = true;
+
+      if (step === 'number') {
+        elements.orderNumber.value = wizardDraft.numero || '';
+        setTimeout(() => elements.orderNumber.focus(), 0);
+      }
+      if (step === 'support') {
+        elements.supportCodeInput.value = wizardDraft.apoio || '';
+        setTimeout(() => elements.supportCodeInput.focus(), 0);
+      }
+      if (step === 'summary') renderOrderSummary();
+      if (pushHistory) {
+        wizardHistoryDepth += 1;
+        history.pushState({ view: 'wizard', step }, '', location.href);
+      }
+    }
+
+    function renderOrderSummary() {
+      elements.summaryDock.textContent = wizardDraft.doca ? `Doca ${wizardDraft.doca.slice(1)}` : '';
+      elements.summaryNumber.textContent = wizardDraft.numero || '';
+      elements.summaryCategory.textContent = wizardDraft.categoria || '';
+      elements.summaryTeam.textContent =
+        wizardDraft.n_pessoas === '1'
+          ? 'Só eu'
+          : wizardDraft.n_pessoas === '2'
+            ? `2 pessoas${wizardDraft.apoio ? ' · ' + wizardDraft.apoio : ''}`
+            : `3 ou mais${wizardDraft.apoio ? ' · ' + wizardDraft.apoio : ''}`;
+    }
+
+    function openWizard() {
+      wizardDraft = {
+        doca: selectedDock || '',
+        numero: '',
+        categoria: selectedCategory || '',
+        n_pessoas: selectedPeople || '1',
+        apoio: ''
+      };
+      wizardEditMode = false;
+      showWizardStep('dock');
+    }
+
+    function wizardBack() {
+      if (wizardStep === 'summary') {
+        const previous = wizardDraft.n_pessoas === '1' ? 'people' : 'support';
+        showWizardStep(previous, false);
+        return;
+      }
+      if (wizardStep === 'support') {
+        showWizardStep('people', false);
+        return;
+      }
+      if (wizardStep === 'people') {
+        showWizardStep('category', false);
+        return;
+      }
+      if (wizardStep === 'category') {
+        showWizardStep('number', false);
+        return;
+      }
+      if (wizardStep === 'number') {
+        showWizardStep('dock', false);
+        return;
+      }
+      closeWizard();
+      showSessionScreen();
+      if (location.hash) history.replaceState({ view: 'turn' }, '', location.href);
     }
 
     function renderActiveOrder() {
@@ -1378,8 +1689,9 @@
       elements.turnScreen.hidden = !onTurnScreen;
       elements.activeOrderScreen.hidden = !onActiveOrderScreen;
       elements.diagnosticScreen.hidden = screen !== 'diagnostic';
-      elements.syncScreen.hidden = !(onTurnScreen || onActiveOrderScreen);
-      elements.eventsScreen.hidden = !(onTurnScreen || onActiveOrderScreen);
+      elements.syncScreen.hidden = true;
+      elements.eventsScreen.hidden = true;
+      elements.menuButton.hidden = !(onTurnScreen || onActiveOrderScreen);
       elements.scanBar.hidden = !onActiveOrderScreen;
       document.body.classList.toggle('has-scan-bar', onActiveOrderScreen);
       if (!onActiveOrderScreen) closeManualScan();
@@ -1402,6 +1714,11 @@
         selectedPeople = orderState.ultimo_n_pessoas;
         updateOrderChoices();
         elements.orderNumber.value = '';
+        wizardDraft = null;
+        wizardEditMode = false;
+        elements.orderForm.hidden = true;
+        elements.newOrderButton.hidden = false;
+        elements.turnScreen.querySelector('.undo-section').hidden = false;
         showScreen('turn');
       }
       void refreshUndoControls();
@@ -2038,7 +2355,7 @@
       elements.deviceNameNotice.textContent = '';
       try {
         const now = new Date();
-        const cracha = elements.sessionBadge.value.trim();
+        const cracha = elements.sessionBadge.value.trim().toUpperCase();
         const deviceName = (elements.deviceNameField.hidden
           ? elements.deviceName.value.trim()
           : elements.sessionDeviceName.value.trim());
@@ -2103,29 +2420,14 @@
     elements.changeOperator.addEventListener('click', switchOperator);
     elements.activeChangeOperator.addEventListener('click', switchOperator);
 
-    elements.orderForm.addEventListener('submit', async event => {
-      event.preventDefault();
+    async function beginOrder({ doca, pedido, categoria, n_pessoas, apoio }) {
       elements.beginOrderButton.disabled = true;
-      elements.dockNotice.textContent = '';
-      elements.orderNotice.textContent = '';
       try {
         const now = new Date();
-        const pedido = elements.orderNumber.value.trim();
-        if (!selectedDock) {
-          elements.dockNotice.textContent = 'Selecione uma doca.';
-          elements.dockButtons.querySelector('button')?.focus();
-          return;
-        }
-        if (!pedido) {
-          elements.orderNotice.textContent = 'Informe o número do pedido.';
-          elements.orderNumber.focus();
-          return;
-        }
-
         const context = {
           pedido,
-          doca: selectedDock,
-          categoria: selectedCategory,
+          doca,
+          categoria,
           cracha: sessionState.cracha,
           aparelho_id: sessionState.aparelho_id,
           fonte: 'toque'
@@ -2133,17 +2435,18 @@
         const dockEvent = await createLocalEvent({
           ...context,
           atividade: 'DOCA_INICIO',
-          n_pessoas: selectedPeople
+          n_pessoas
         }, now);
 
         const previousOrder = { ...orderState, event_ids: [...orderState.event_ids] };
         orderState.pedido = pedido;
-        orderState.doca = selectedDock;
-        orderState.categoria = selectedCategory;
-        orderState.n_pessoas = selectedPeople;
+        orderState.doca = doca;
+        orderState.categoria = categoria;
+        orderState.n_pessoas = n_pessoas;
+        orderState.apoio = (apoio || '').trim().toUpperCase();
         orderState.inicio_ts = now.getTime();
         orderState.event_ids = [dockEvent.event_id];
-        orderState.ultimo_n_pessoas = selectedPeople;
+        orderState.ultimo_n_pessoas = n_pessoas;
         orderState.compras_aguardando = null;
         orderState.ultimo_toque_ts = now.getTime();
         orderState.saida_doca_ts = null;
@@ -2151,18 +2454,141 @@
         orderState.camara_atual = null;
         if (!saveOrderState()) {
           Object.assign(orderState, previousOrder);
-          return;
+          return false;
         }
 
-        startConfirmation('DOCA', dockEvent.event_id, selectedDock, now);
+        startConfirmation('DOCA', dockEvent.event_id, doca, now);
         renderActiveOrder();
         showScreen('active-order');
         void syncQueue();
+        return true;
       } catch (error) {
         showMessage(error.message || 'Não foi possível começar o pedido.', true);
+        return false;
       } finally {
         elements.beginOrderButton.disabled = false;
       }
+    }
+
+    elements.orderForm.addEventListener('submit', event => event.preventDefault());
+
+    elements.newOrderButton.addEventListener('click', openWizard);
+    elements.skipCategoryButton.addEventListener('click', () => {
+      if (!wizardDraft) return;
+      wizardDraft.categoria = '';
+      if (wizardEditMode) showWizardStep('summary');
+      else showWizardStep('people');
+    });
+    elements.orderNumber.addEventListener('keydown', event => {
+      if (event.key !== 'Enter' && event.keyCode !== 13) return;
+      event.preventDefault();
+      if (!wizardDraft) return;
+      if (Date.now() - orderLabelBlockedAt < 1500) return;
+      const pedido = elements.orderNumber.value.trim();
+      if (!pedido) {
+        elements.orderNotice.textContent = 'Informe o número do pedido.';
+        return;
+      }
+      wizardDraft.numero = pedido;
+      elements.orderNotice.textContent = '';
+      if (wizardEditMode) showWizardStep('summary');
+      else showWizardStep('category');
+    });
+    elements.supportContinueButton.addEventListener('click', () => {
+      if (!wizardDraft) return;
+      wizardDraft.apoio = elements.supportCodeInput.value.trim().toUpperCase();
+      showWizardStep('summary');
+    });
+    elements.supportSkipButton.addEventListener('click', () => {
+      if (!wizardDraft) return;
+      wizardDraft.apoio = '';
+      showWizardStep('summary');
+    });
+    elements.supportCodeInput.addEventListener('input', () => {
+      elements.supportCodeInput.value = elements.supportCodeInput.value.toUpperCase();
+    });
+    elements.orderSupportBadge.addEventListener('input', () => {
+      elements.orderSupportBadge.value = elements.orderSupportBadge.value.toUpperCase();
+    });
+    elements.sessionBadge.addEventListener('input', () => {
+      elements.sessionBadge.value = elements.sessionBadge.value.toUpperCase();
+    });
+    elements.wizardBackButton.addEventListener('click', wizardBack);
+    elements.editDock.addEventListener('click', () => {
+      wizardEditMode = true;
+      showWizardStep('dock');
+    });
+    elements.editNumber.addEventListener('click', () => {
+      wizardEditMode = true;
+      showWizardStep('number');
+    });
+    elements.editCategory.addEventListener('click', () => {
+      wizardEditMode = true;
+      showWizardStep('category');
+    });
+    elements.editTeam.addEventListener('click', () => {
+      wizardEditMode = true;
+      showWizardStep('people');
+    });
+    elements.beginOrderButton.addEventListener('click', () => {
+      if (!wizardDraft) return;
+      void beginOrder({
+        doca: wizardDraft.doca,
+        pedido: wizardDraft.numero,
+        categoria: wizardDraft.categoria,
+        n_pessoas: wizardDraft.n_pessoas,
+        apoio: wizardDraft.apoio
+      }).then(ok => {
+        if (ok) wizardDraft = null;
+      });
+    });
+
+    elements.menuButton.addEventListener('click', () => {
+      menuOpen = !menuOpen;
+      elements.menuPanel.hidden = !menuOpen;
+      elements.menuButton.setAttribute('aria-expanded', String(menuOpen));
+      if (menuOpen) {
+        elements.syncScreen.hidden = true;
+        elements.eventsScreen.hidden = true;
+        history.pushState({ view: 'menu' }, '', location.href);
+      }
+    });
+    elements.syncMenuButton.addEventListener('click', () => {
+      elements.syncScreen.hidden = false;
+      elements.eventsScreen.hidden = true;
+    });
+    elements.eventsMenuButton.addEventListener('click', () => {
+      elements.eventsScreen.hidden = false;
+      elements.syncScreen.hidden = true;
+      void render();
+    });
+
+    window.addEventListener('popstate', event => {
+      if (menuOpen) {
+        menuOpen = false;
+        elements.menuPanel.hidden = true;
+        elements.menuButton.setAttribute('aria-expanded', 'false');
+        elements.syncScreen.hidden = true;
+        elements.eventsScreen.hidden = true;
+        return;
+      }
+      if (!elements.turnScreen.hidden && wizardStep) {
+        if (wizardStep === 'dock') {
+          closeWizard();
+          showSessionScreen();
+        } else {
+          const previous = {
+            summary: wizardDraft && wizardDraft.n_pessoas === '1' ? 'people' : 'support',
+            support: 'people',
+            people: 'category',
+            category: 'number',
+            number: 'dock'
+          }[wizardStep];
+          if (previous) showWizardStep(previous, false);
+        }
+        return;
+      }
+      history.pushState({ view: 'protected' }, '', location.href);
     });
 
     elements.sendPurchasesButton.addEventListener('click', () => {
@@ -2223,7 +2649,7 @@
       try {
         const arrivalEvent = await createTurnEvent('CAMARA_CHEGADA', now, {
           detalhe: camera,
-          cracha_apoio: elements.orderSupportBadge.value.trim()
+          cracha_apoio: (elements.orderSupportBadge.value.trim() || orderState.apoio || '').toUpperCase()
         }, () => {
           orderState.camara_chegada_ts = arrivalTimestamp;
           orderState.camara_atual = camera;
@@ -2654,6 +3080,7 @@
     }
 
     async function startApp() {
+      history.replaceState({ view: 'protected' }, '', location.href);
       readConfig();
       loadSession();
       loadOrderState();
