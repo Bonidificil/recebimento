@@ -317,6 +317,24 @@
     body.scan-takeover .scan-dismiss { display: block; }
     body.scan-takeover #active-order-screen { opacity: .15; pointer-events: none; }
 
+    /* "+ apoio": página própria (não mais campo inline), mesmo estilo das telas do assistente */
+    .support-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 45;
+      background: #fff;
+      overflow-y: auto;
+      padding: 18px 16px;
+    }
+    .support-overlay[hidden] { display: none; }
+    #support-overlay-form { display: flex; flex-direction: column; min-height: 100%; }
+    #support-codes-fields { display: grid; gap: 14px; margin-top: 4px; }
+    #support-codes-fields label { display: grid; gap: 6px; font-weight: 700; }
+    #support-codes-fields input {
+      min-height: 72px; font-size: 1.3rem; font-weight: 800; text-align: center;
+      border: 3px solid var(--azul); border-radius: 18px; letter-spacing: 1px;
+    }
+
     @media (max-width: 560px) {
       :root { font-size: 16px; }
       header { padding: 12px 14px; }
@@ -569,6 +587,26 @@
       </section>
     </section>
 
+    <section id="support-overlay" class="support-overlay" aria-labelledby="support-overlay-heading" hidden>
+      <form id="support-overlay-form">
+        <div id="support-people-step" class="wizard-step">
+          <p class="wizard-indicator">Apoio · 1 de 2</p>
+          <h1 id="support-overlay-heading">Quantas pessoas estão ajudando agora?</h1>
+          <div id="support-people-buttons" class="wizard-options" role="group" aria-label="Selecione o número de pessoas que estão ajudando"></div>
+        </div>
+        <div id="support-codes-step" class="wizard-step" hidden>
+          <p class="wizard-indicator">Apoio · 2 de 2</p>
+          <h1>Código de quem está ajudando</h1>
+          <div id="support-codes-fields"></div>
+          <p id="support-codes-notice" class="field-notice" role="status" aria-live="polite"></p>
+          <button id="support-codes-continue-button" type="button">Continuar</button>
+        </div>
+        <div class="wizard-footer">
+          <button id="support-overlay-back-button" class="secondary" type="button">← Voltar</button>
+        </div>
+      </form>
+    </section>
+
     <div id="scan-bar" class="scan-bar scan-nofocus" hidden>
       <p id="scan-status" class="scan-status" role="status" aria-live="polite">Toque aqui para bipar</p>
       <div class="scan-row">
@@ -810,6 +848,14 @@
       supportBadgeToggle: document.getElementById('support-badge-toggle'),
       supportBadgeField: document.getElementById('support-badge-field'),
       orderSupportBadge: document.getElementById('order-support-badge'),
+      supportOverlay: document.getElementById('support-overlay'),
+      supportPeopleStep: document.getElementById('support-people-step'),
+      supportPeopleButtons: document.getElementById('support-people-buttons'),
+      supportCodesStep: document.getElementById('support-codes-step'),
+      supportCodesFields: document.getElementById('support-codes-fields'),
+      supportCodesNotice: document.getElementById('support-codes-notice'),
+      supportCodesContinueButton: document.getElementById('support-codes-continue-button'),
+      supportOverlayBackButton: document.getElementById('support-overlay-back-button'),
       tripTimeMessage: document.getElementById('trip-time-message'),
       returnDockButton: document.getElementById('return-dock-button'),
       returnTimeMessage: document.getElementById('return-time-message'),
@@ -2661,14 +2707,98 @@
       });
     });
 
-    elements.supportBadgeToggle.addEventListener('click', () => {
-      elements.supportBadgeField.hidden = !elements.supportBadgeField.hidden;
-      if (elements.supportBadgeField.hidden) {
-        elements.orderSupportBadge.value = '';
-      } else {
-        elements.orderSupportBadge.focus();
+    // A2.1: "+ apoio" abre uma página própria (pessoas + um crachá por pessoa extra),
+    // no lugar do campo único que aparecia embutido na tela do pedido.
+    let supportOverlayCount = '1';
+
+    function renderSupportPeopleButtons() {
+      elements.supportPeopleButtons.replaceChildren();
+      const options = [
+        ['1', 'Ninguém, só eu'],
+        ['2', '2 pessoas'],
+        ['3', '3 ou mais']
+      ];
+      for (const [value, label] of options) {
+        createChoiceButton(elements.supportPeopleButtons, label, value, selected => {
+          supportOverlayCount = selected;
+          for (const button of elements.supportPeopleButtons.querySelectorAll('button')) {
+            button.setAttribute('aria-pressed', String(button.dataset.value === selected));
+          }
+          if (selected === '1') {
+            orderState.apoio = '';
+            saveOrderState();
+            closeSupportOverlay();
+            renderActiveOrder();
+            return;
+          }
+          showSupportCodesStep(Number(selected) - 1);
+        });
       }
+    }
+
+    function showSupportCodesStep(extraCount) {
+      elements.supportCodesFields.replaceChildren();
+      for (let i = 0; i < extraCount; i += 1) {
+        const label = document.createElement('label');
+        const ordinal = i === 0 ? '2ª pessoa' : '3ª pessoa';
+        label.textContent = ordinal;
+        const input = document.createElement('input');
+        input.className = 'support-code-field';
+        input.maxLength = 80;
+        input.autocomplete = 'off';
+        input.autocapitalize = 'characters';
+        input.placeholder = `Ex.: OP0${i + 2}`;
+        input.addEventListener('input', () => {
+          input.value = input.value.toUpperCase();
+        });
+        label.appendChild(input);
+        elements.supportCodesFields.appendChild(label);
+      }
+      elements.supportCodesNotice.textContent = '';
+      elements.supportPeopleStep.hidden = true;
+      elements.supportCodesStep.hidden = false;
+      const firstInput = elements.supportCodesFields.querySelector('input');
+      if (firstInput) firstInput.focus();
+    }
+
+    function openSupportOverlay() {
+      supportOverlayCount = '1';
+      elements.supportCodesStep.hidden = true;
+      elements.supportPeopleStep.hidden = false;
+      renderSupportPeopleButtons();
+      elements.scanBar.hidden = true;
+      elements.supportOverlay.hidden = false;
+    }
+
+    function closeSupportOverlay() {
+      elements.supportOverlay.hidden = true;
+      elements.scanBar.hidden = elements.activeOrderScreen.hidden;
+      renderScanStatus();
+    }
+
+    elements.supportCodesContinueButton.addEventListener('click', () => {
+      const inputs = [...elements.supportCodesFields.querySelectorAll('.support-code-field')];
+      const codes = inputs.map(input => input.value.trim().toUpperCase());
+      if (codes.some(code => !code)) {
+        elements.supportCodesNotice.textContent = 'Preencha o crachá de cada pessoa.';
+        return;
+      }
+      orderState.apoio = codes.join(', ');
+      saveOrderState();
+      closeSupportOverlay();
+      renderActiveOrder();
     });
+
+    elements.supportOverlayBackButton.addEventListener('click', () => {
+      if (!elements.supportCodesStep.hidden) {
+        elements.supportCodesStep.hidden = true;
+        elements.supportPeopleStep.hidden = false;
+        return;
+      }
+      closeSupportOverlay();
+    });
+
+    elements.supportBadgeToggle.addEventListener('click', openSupportOverlay);
 
     elements.dockDepartureButton.addEventListener('click', () => {
       void runTurnAction('dock-departure', 'SAIDA_DOCA', {}, now => {
