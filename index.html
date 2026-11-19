@@ -292,6 +292,31 @@
     body.has-scan-bar main { padding-bottom: 170px; }
     body.has-scan-bar.scan-diag main { padding-bottom: 300px; }
 
+    /* A2: enquanto houver confirmação pendente, a barra de leitura toma a tela
+       toda, para o operador conferir antes de tocar em qualquer outra coisa.
+       "Continuar sem confirmar agora" sempre existe como saída (nada trava de vez). */
+    .scan-dismiss { display: none; }
+    body.scan-takeover #scan-bar {
+      position: fixed;
+      inset: 0;
+      z-index: 40;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      gap: 18px;
+      padding: 24px max(16px, calc((100% - 850px) / 2));
+    }
+    body.scan-takeover .scan-status {
+      font-size: 1.6rem;
+      min-height: auto;
+      text-align: center;
+      justify-content: center;
+    }
+    body.scan-takeover .scan-row { grid-template-columns: 1fr; }
+    body.scan-takeover .scan-row input { min-height: 72px; font-size: 1.3rem; text-align: center; }
+    body.scan-takeover .scan-dismiss { display: block; }
+    body.scan-takeover #active-order-screen { opacity: .15; pointer-events: none; }
+
     @media (max-width: 560px) {
       :root { font-size: 16px; }
       header { padding: 12px 14px; }
@@ -556,6 +581,7 @@
         <input id="scan-manual-input" inputmode="text" autocomplete="off" autocapitalize="characters" autocorrect="off" spellcheck="false" maxlength="40" aria-label="Código da etiqueta (ex.: CF ou D1)" placeholder="Ex.: CF ou D1">
         <button id="scan-manual-confirm" type="button">Confirmar</button>
       </div>
+      <button id="scan-takeover-dismiss" class="secondary scan-dismiss" type="button">Continuar sem confirmar agora</button>
     </div>
 
     <section id="diagnostic-screen" aria-labelledby="test-heading" hidden>
@@ -826,7 +852,8 @@
       scanManualToggle: document.getElementById('scan-manual-toggle'),
       scanManualField: document.getElementById('scan-manual-field'),
       scanManualInput: document.getElementById('scan-manual-input'),
-      scanManualConfirm: document.getElementById('scan-manual-confirm')
+      scanManualConfirm: document.getElementById('scan-manual-confirm'),
+      scanTakeoverDismiss: document.getElementById('scan-takeover-dismiss')
     };
 
     const sessionState = {
@@ -864,6 +891,7 @@
     let pendingUndoTarget = null;
     let undoConfirmationTimer = null;
     let scanPending = null;
+    let scanTakeoverDismissed = false;
     const scanLogLines = [];
     let rebindingScan = false;
     let scanBound = false;
@@ -1603,13 +1631,19 @@
       elements.activeOrderOperator.textContent = `Operador: ${sessionState.cracha}`;
       elements.activeOrderPeople.textContent =
         `Pessoas: ${orderState.n_pessoas === '3' ? '3+' : orderState.n_pessoas}`;
+      const atDock = orderState.camara_chegada_ts === null;
       elements.dockDepartureButton.hidden = !USAR_SAIDA_DOCA;
-      elements.sendPurchasesButton.hidden = Boolean(orderState.compras_aguardando);
+      // A2: Compras e Sistema caiu só fazem sentido na doca, onde fica o terminal.
+      elements.sendPurchasesButton.hidden = Boolean(orderState.compras_aguardando) || !atDock;
       elements.purchasesReasons.hidden = Boolean(orderState.compras_aguardando) ||
-        elements.purchasesReasons.dataset.open !== 'true';
+        elements.purchasesReasons.dataset.open !== 'true' || !atDock;
       elements.purchasesWait.hidden = !orderState.compras_aguardando;
-      elements.purchasesRespondedButton.hidden = !orderState.compras_aguardando;
+      elements.purchasesRespondedButton.hidden = !orderState.compras_aguardando || !atDock;
       elements.returnDockButton.hidden = orderState.camara_chegada_ts === null;
+      elements.systemOutageToggleButton.hidden = !atDock;
+      // A2: a equipe de apoio já foi perguntada uma vez no início do pedido;
+      // só mostra "+ apoio" de novo se ninguém informou nada lá.
+      elements.supportBadgeToggle.hidden = Boolean(orderState.apoio);
       elements.systemOutageToggleButton.textContent = sessionState.sistema_caiu
         ? 'Sistema voltou'
         : 'Sistema caiu';
@@ -1696,6 +1730,7 @@
       document.body.classList.toggle('has-scan-bar', onActiveOrderScreen);
       if (!onActiveOrderScreen) closeManualScan();
       renderSystemOutageNotice();
+      updateScanTakeover();
       if (onActiveOrderScreen) {
         scanBound = false;
         setTimeout(focusScanInput, 0);
@@ -2669,24 +2704,28 @@
       }
     }
 
-    elements.returnDockButton.addEventListener('click', () => {
+    elements.returnDockButton.addEventListener('click', async () => {
       const now = new Date();
       if (!acceptActionTouch('return-to-dock', now)) return;
       const arrivalTimestamp = orderState.camara_chegada_ts;
       const camera = orderState.camara_atual;
       if (arrivalTimestamp === null || !camera) return;
-      void createTurnEvent('VOLTA_DOCA', now, { detalhe: camera }, () => {
-        orderState.camara_chegada_ts = null;
-        orderState.camara_atual = null;
-        showTimedMessage(
-          value => { returnMessageState = value; },
-          now.getTime(),
-          Math.max(0, now.getTime() - arrivalTimestamp)
-        );
-      }).catch(error => {
+      try {
+        const returnEvent = await createTurnEvent('VOLTA_DOCA', now, { detalhe: camera }, () => {
+          orderState.camara_chegada_ts = null;
+          orderState.camara_atual = null;
+          showTimedMessage(
+            value => { returnMessageState = value; },
+            now.getTime(),
+            Math.max(0, now.getTime() - arrivalTimestamp)
+          );
+        });
+        // A2: confirmação por bipe também ao voltar à doca, igual já acontecia na chegada à câmara.
+        startConfirmation('DOCA', returnEvent.event_id, orderState.doca, now);
+      } catch (error) {
         elements.orderActionMessage.textContent =
           error.message || 'Não foi possível registrar a volta à doca.';
-      });
+      }
     });
 
     elements.lastPalletButton.addEventListener('click', async () => {
@@ -2756,8 +2795,17 @@
         ate: now.getTime() + JANELA_CONFIRMACAO_MS
       };
       scanFeedback = null;
+      scanTakeoverDismissed = false;
       logScan(`pendência ABERTA: ${scanPending.esperado} (30 s)`);
       renderScanStatus(now.getTime());
+    }
+
+    // A2: enquanto houver confirmação pendente, a barra de leitura toma a tela
+    // toda, para o operador conferir antes de tocar em qualquer outra coisa.
+    // O operador sempre pode "continuar sem confirmar agora" (nada bloqueia de vez).
+    function updateScanTakeover() {
+      const show = Boolean(scanPending) && !scanTakeoverDismissed && !elements.activeOrderScreen.hidden;
+      document.body.classList.toggle('scan-takeover', show);
     }
 
     function setScanFeedback(texto, tipo, durationMs = 4000) {
@@ -2799,6 +2847,7 @@
       }
       elements.scanStatus.textContent = texto;
       elements.scanBar.className = `scan-bar ${estado}`;
+      updateScanTakeover();
     }
 
     function rebindScanInput(motivo) {
@@ -2979,6 +3028,13 @@
       }
       void handleScan(texto, 'manual');
     }
+
+    elements.scanTakeoverDismiss.addEventListener('click', () => {
+      // A2: não cancela a pendência, só tira a tela cheia; a confirmação continua aberta na barra.
+      scanTakeoverDismissed = true;
+      logScan('tela cheia dispensada pelo operador; pendência continua aberta');
+      updateScanTakeover();
+    });
 
     elements.scanManualConfirm.addEventListener('click', confirmManualScan);
     elements.scanManualInput.addEventListener('keydown', event => {
